@@ -36,7 +36,7 @@
 #include "sym_tm.h"
 
 // #define DEBUG_DUAL_FUNC
-#define CHECK_DUAL_FUNC
+// #define CHECK_DUAL_FUNC
 
 /*===========================================================================*/
 /*===========================================================================*/
@@ -3827,6 +3827,21 @@ void printDisjunction(disjunction_desc disj){
         printf("%d : %.2f, ", disj.ubvaridx[i], disj.ub[i]);
     }
 	printf("\n");
+	printf("Idx Duals at this leaf: [");
+	for(int i = 0; i < disj.duallen; i++){
+        printf("%d ", disj.dual_idx[i]);
+    }
+    printf("]\n");
+	printf("Idx Duals leaf at this leaf: [");
+	for(int i = 0; i < disj.leaflen; i++){
+        printf("%d ", disj.leaf_idx[i]);
+    }
+    printf("]\n");
+	printf("Idx Rays at this leaf: [");
+	for(int i = 0; i < disj.raylen; i++){
+        printf("%d ", disj.ray_idx[i]);
+    }
+    printf("]\n");
 	printf("--------------------\n");
 }
 
@@ -3908,17 +3923,17 @@ void print_dual_function(warm_start_desc *ws)
 	// }
     
 	
-	// printf("==========================\n");
-	// printf("DISJUNCTION\n");
-	// printf("==========================\n");
-	// if (ws->dual_func->num_terms == 0){
-	// 	printf("Only root node in the B&B Tree!\n");
-	// } else {
-	// 	for (int i = 0; i < ws->dual_func->num_terms; i++)
-	// 	{
-	// 		printDisjunction(ws->dual_func->disj[i]);
-	// 	}
-	// }
+	printf("==========================\n");
+	printf("DISJUNCTION\n");
+	printf("==========================\n");
+	if (ws->dual_func->num_terms == 0){
+		printf("Only root node in the B&B Tree!\n");
+	} else {
+		for (int i = 0; i < ws->dual_func->num_terms; i++)
+		{
+			printDisjunction(ws->dual_func->disj[i]);
+		}
+	}
 	
 
 	// printf("==========================\n");
@@ -4076,6 +4091,83 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 			(*prev_term)++;
 		} 
 	} 
+
+	// printf("---------------------------------\n");
+	// printf("NODE index %d\n", node->bc_index);
+	// printf("NODE level %d\n", node->bc_level);
+	// if (level > 0){
+	// 	printf("Branched on var %d, sense %c, rhs %.5f\n", bobj->name, bobj->sense[j], bobj->rhs[j]);
+	// }
+	// if (!node->rays){
+	// 	printf("NODE dual sol (beta) %.5f\n", node->duals[0]);
+	// 	double intercept = 0;
+
+	// 	for (i = 1; i < mip->m; i++){
+	// 		intercept += node->duals[i] * mip->rhs[i];
+	// 	}
+	// 	for (i = 0; i < mip->n; i++)
+	// 	{
+	// 		if (node->dj[i] >= 0)
+	// 		{
+	// 			intercept += node->dj[i] * mip->lb[i];
+	// 		}
+	// 		else
+	// 		{
+	// 			intercept += node->dj[i] * mip->ub[i];
+	// 		}
+	// 	}
+
+	// 	for (i = 0; i < level; i++)
+	// 	{
+	// 		if (bpath[i].type == BRANCHING_VARIABLE)
+	// 		{
+	// 			switch (bpath[i].sense)
+	// 			{
+	// 			case 'E':
+	// 				if (bpath[i].rhs < mip->ub[j])
+	// 				{
+	// 					intercept += node->dj[j] * (bpath[i].rhs - mip->ub[j]);
+	// 				}
+	// 				else
+	// 				{
+	// 					intercept += node->dj[j] * (bpath[i].rhs - mip->lb[j]);
+	// 				}
+	// 				break;
+	// 			case 'L':
+	// 				if (node->dj[j] <= 0)
+	// 				{
+	// 					intercept += node->dj[j] * (bpath[i].rhs - mip->ub[j]);
+	// 				}
+	// 				break;
+	// 			case 'G':
+	// 				if (node->dj[j] >= 0)
+	// 				{
+	// 					intercept += node->dj[j] * (bpath[i].rhs - mip->lb[j]);
+	// 				}
+	// 				break;
+	// 			case 'R':
+	// 				printf("Warning: Ranged constraints not handled!\n");
+	// 				exit(1);
+	// 				break;
+	// 			}
+	// 		}
+	// 		else
+	// 		{ /* BRANCHING_CUT */
+	// 			printf("Warning: Branching cuts not handled!\n");
+	// 			exit(1);
+	// 		}
+	// 	}
+
+	// 	printf("NODE intercept %.5f\n", intercept);
+	// } else {
+	// 	printf("NODE infeasible\n");
+	// 	printf("NODE ray: [");
+	// 	for (i = 0; i < mip->m; i++){
+	// 		printf("%.5f, ", node->rays[i]);
+	// 	}
+	// 	printf("]\n");
+	// }
+	
 
 	// check feasibility status of this node
 	if (node->feasibility_status == ROOT_NODE ||
