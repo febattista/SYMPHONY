@@ -965,7 +965,8 @@ typedef struct DISJUNCTION_DESC{
 
 typedef struct DUAL_FUNC_DESC{
    // Parameters
-   int                 policy;
+   int                 dualsPolicy;
+   int                 raysPolicy;
    double              granularity;
    // dual pieces and reduced costs
    // Hash table to keep uniqueness of dual pieces

@@ -588,7 +588,17 @@
 
 // feb223
 
-/*----------------- Policy to save dual func from nodes -------------------*/
+/*----------------- Policy to save duals from nodes -------------------*/
 #define DUALS_SAVE_ALL 0
 #define DUALS_LEAF_ONLY 1
+
+/*----------- Policy to save rays from infeasible nodes ---------------*/
+#define RAYS_SAVE_FARKAS 0    /* Save Farkas duals to prove 
+                                 infeasibility of a node */
+
+#define RAYS_SAVE_DUALS  1    /* Save Dual solutions to prove 
+                                 infeasibility of a node */
+
+#define RAYS_SAVE_ALL    2    /* Save both Dual solutions and Farkas 
+                                 duak to prove infeasibility of a node */
 

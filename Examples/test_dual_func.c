@@ -6,12 +6,12 @@
 #include <time.h>
 
 #include "symphony.h"
+#include "/Users/feb223/projects/coin/RVF/SYMPHONY/include/sym_types.h"
+#include "/Users/feb223/projects/coin/RVF/SYMPHONY/include/sym_master.h"
 // feb223
 // These paths should be changed
 // I still don't figure out how to use makefile to 
 // include these files automatically
-#include "/Users/feb223/projects/coin/RVF/SYMPHONY/include/sym_types.h"
-#include "/Users/feb223/projects/coin/RVF/SYMPHONY/include/sym_master.h"
 
 void generate_rand_array(int m, int l, int u, double *res) {
   for (int i = 0; i < m; i++) {
@@ -82,6 +82,10 @@ int clean_row_arrays(int *col_indices, double *col_elems,
    *numelems = 0;
 }
 
+//==============================================================
+// functions to formulate Master Problem in Generalized Benders 
+//==============================================================
+
 int add_q_u_v_f_variables(sym_environment *env,
             disjunction_desc* disj, int i,
             int *q_indices, int *q_len,
@@ -103,20 +107,20 @@ int add_q_u_v_f_variables(sym_environment *env,
    sym_add_col(env, 0, NULL, NULL, 0, 1, 0, TRUE, varname);
    u_indices[(*u_len)++] = (*col_idx)++;
 
-   if (disj->raylen){
-      // Add v_t variables
-      snprintf(varname, sizeof(varname), "v%d", i);
-      sym_add_col(env, 0, NULL, NULL, 0, 1, 0, TRUE, varname);
-      v_indices[(*v_len)++] = (*col_idx)++;
+   // if (disj->raylen){
+   //    // Add v_t variables
+   //    snprintf(varname, sizeof(varname), "v%d", i);
+   //    sym_add_col(env, 0, NULL, NULL, 0, 1, 0, TRUE, varname);
+   //    v_indices[(*v_len)++] = (*col_idx)++;
 
-      for (int j = 0; j < disj->raylen; j++){
-         // Add f_tj variables
-         snprintf(varname, sizeof(varname), "f%d", (*f_len));
-         sym_add_col(env, 0, NULL, NULL, 0, 1, 0, TRUE, varname);
-         f_indices[(*f_len)++] = (*col_idx)++;
-      }
+   //    for (int j = 0; j < disj->raylen; j++){
+   //       // Add f_tj variables
+   //       snprintf(varname, sizeof(varname), "f%d", (*f_len));
+   //       sym_add_col(env, 0, NULL, NULL, 0, 1, 0, TRUE, varname);
+   //       f_indices[(*f_len)++] = (*col_idx)++;
+   //    }
       
-   }
+   // }
    
    return 0;
 }
@@ -138,14 +142,14 @@ int add_phi_constrs(sym_environment *env,
    col_indices[(*numelems)] = q_indices[q];
    col_elems[(*numelems)++] = -1;
 
-   if (disj->raylen){
-      // WARNING: one single variable is enough 
-      // if the num of rays at each leaf is exactly 1
-      // otherwise the model may be infeasible
-      // v_t
-      col_indices[(*numelems)] = v_indices[v];
-      col_elems[(*numelems)++] = -bigM;
-   }
+   // if (disj->raylen){
+   //    // WARNING: one single variable is enough 
+   //    // if the num of rays at each leaf is exactly 1
+   //    // otherwise the model may be infeasible
+   //    // v_t
+   //    col_indices[(*numelems)] = v_indices[v];
+   //    col_elems[(*numelems)++] = -bigM;
+   // }
 
    sym_add_row(env, (*numelems), col_indices, col_elems, 'L', 0, 0);
    clean_row_arrays(col_indices, col_elems, numelems);
@@ -312,6 +316,9 @@ int add_u_constr(sym_environment *env,
 }
 
 
+//==============================================================
+// Main
+//==============================================================
 
 int main(int argc, char **argv)
 {   
@@ -476,13 +483,13 @@ int main(int argc, char **argv)
 
          // sym_write_lp(master, "mastertest");
          
-         add_ray_constrs(master, df, disj, i, m, n,
-                              q_indices, q_len - 1,
-                              u_indices, u_len - 1,
-                              v_indices, v_len - 1, 
-                              f_indices, f_len - 1,
-                              col_indices, col_elems, &numelems,
-                              lb, ub);
+         // add_ray_constrs(master, df, disj, i, m, n,
+         //                      q_indices, q_len - 1,
+         //                      u_indices, u_len - 1,
+         //                      v_indices, v_len - 1, 
+         //                      f_indices, f_len - 1,
+         //                      col_indices, col_elems, &numelems,
+         //                      lb, ub);
 
          // sym_write_lp(master, "mastertest");
          
@@ -512,10 +519,14 @@ int main(int argc, char **argv)
       sym_get_obj_val(master, &warmObjVal);
       master_objs[i] = warmObjVal;
       printf("master obj val: %.5f\n", warmObjVal);
+      printf("============================\n", warmObjVal);
       sym_close_environment(master);
    }
 
-   // Now check that we keep strength
+//==============================================================
+// Now check that we keep strength
+//==============================================================
+   
    for (int i = 0; i < num_rhs; i++){
 
       // free memory
@@ -598,13 +609,13 @@ int main(int argc, char **argv)
 
          // sym_write_lp(master, "mastertest");
          
-         add_ray_constrs(master, df, disj, i, m, n,
-                              q_indices, q_len - 1,
-                              u_indices, u_len - 1,
-                              v_indices, v_len - 1,
-                              f_indices, f_len - 1, 
-                              col_indices, col_elems, &numelems,
-                              lb, ub);
+         // add_ray_constrs(master, df, disj, i, m, n,
+         //                      q_indices, q_len - 1,
+         //                      u_indices, u_len - 1,
+         //                      v_indices, v_len - 1,
+         //                      f_indices, f_len - 1, 
+         //                      col_indices, col_elems, &numelems,
+         //                      lb, ub);
 
          // sym_write_lp(master, "mastertest");
          
@@ -631,6 +642,169 @@ int main(int argc, char **argv)
       sym_get_obj_val(master, &warmObjVal);
       printf("master obj val: %.5f\n", warmObjVal);
       sym_close_environment(master);
+   }
+
+//==============================================================
+// Now check that we are a dual function
+//==============================================================
+
+   int num_tests = 10;
+   int lbRhs = 0, ubRhs = 10000;
+
+   double *testRhs = (double*)malloc(sizeof(double) * m);
+   double testObjVal = 0;
+
+   sym_environment *test = sym_open_environment();
+
+   sym_set_int_param(test, "verbosity", -2);
+   sym_parse_command_line(test, argc, argv); 
+   sym_load_problem(test);
+
+   sym_set_int_param(test, "keep_warm_start", TRUE);
+   sym_set_int_param(test, "keep_dual_function_description", TRUE);
+   sym_set_int_param(test, "should_use_rel_br", FALSE);
+   sym_set_int_param(test, "use_hot_starts", FALSE);
+   sym_set_int_param(test, "should_warmstart_node", TRUE);
+   sym_set_int_param(test, "sensitivity_analysis", TRUE);
+   sym_set_int_param(test, "sensitivity_rhs", true);
+   sym_set_int_param(test, "sensitivity_bounds", TRUE);
+   sym_set_int_param(test, "set_obj_upper_lim", FALSE);
+   sym_set_int_param(test, "do_primal_heuristic", FALSE);
+   sym_set_int_param(test, "prep_level", -1);
+   sym_set_int_param(test, "tighten_root_bounds", FALSE);
+   sym_set_int_param(test, "max_sp_size", 100);
+   sym_set_int_param(test, "do_reduced_cost_fixing", FALSE);
+   sym_set_int_param(test, "generate_cgl_cuts", FALSE); 
+
+   srand(12345);
+
+   for (int i = 0; i < num_tests; i++){
+
+      generate_rand_array(m, lbRhs, ubRhs, testRhs);
+
+      set_rhs(test, testRhs, m);
+      sym_solve(test);
+      sym_get_obj_val(test, &testObjVal);
+      printf("recourse obj val: %.5f\n", testObjVal);
+
+      // free memory
+      if (col_indices) free(col_indices);
+      if (col_elems)   free(col_elems);
+      if (q_indices)   free(q_indices);
+      if (u_indices)   free(u_indices);
+      if (v_indices)   free(v_indices);
+      if (f_indices)   free(f_indices);
+      q_len = 0, u_len = 0, v_len = 0, f_len = 0;
+      col_idx = 1;
+
+      master = sym_open_environment();
+      sym_set_int_param(master, "verbosity", -2);
+      // This dummy is needed now since we are starting
+      // from an empty problem and SYMPHONY mess it up.
+      // In GenBenders there will be the base master problem
+      char dummy[33] = "dummy.lp";
+      sym_read_lp(master, dummy);
+
+      df = recourse->warm_start->dual_func;  
+
+      for (int i = 0; i < df->num_terms; i++){
+         disj = df->disj + i;
+         num_rays += disj->raylen;
+      }
+
+      max_num_cols = 1 + m + num_scen + 3 * df->num_terms + num_rays;
+
+      // row data
+      col_indices = (int*)malloc(sizeof(int) * max_num_cols);
+      col_elems = (double*)malloc(sizeof(double) * max_num_cols);
+      numelems = 0;
+      intercept = 0;
+
+      // col data
+      q_indices = (int*)malloc(sizeof(int) * df->num_terms);
+      u_indices = (int*)malloc(sizeof(int) * df->num_terms);
+      v_indices = (int*)malloc(sizeof(int) * df->num_terms);
+      f_indices = (int*)malloc(sizeof(int) * num_rays);
+
+      // Add beta variables
+      for (int i = 0; i < m; i++){
+         snprintf(varname, sizeof(varname), "b%d", i);
+         sym_add_col(master, 0, NULL, NULL, -bigM, bigM, 0, FALSE, varname);
+         col_idx++;
+      }
+
+      snprintf(varname, sizeof(varname), "phi");
+      sym_add_col(master, 0, NULL, NULL, -bigM, bigM, 1, FALSE, varname);
+      col_idx++;
+
+      for (int i = 0; i < df->num_terms; i++){
+         disj = df->disj + i;
+         add_q_u_v_f_variables(master, disj, i, 
+                              q_indices, &q_len,
+                              u_indices, &u_len,
+                              v_indices, &v_len, 
+                              f_indices, &f_len, 
+                              &col_idx);
+
+         // sym_write_lp(master, "mastertest");
+
+         add_phi_constrs(master, disj, i, m,
+                              q_indices, q_len - 1,
+                              u_indices, u_len - 1,
+                              v_indices, v_len - 1,
+                              col_indices, col_elems, &numelems);
+
+
+         // sym_write_lp(master, "mastertest");
+
+         change_lbub_from_disj(lb, ub, n, disj);
+
+         add_dual_constrs(master, df, disj, i, m, n,
+                              q_indices, q_len - 1,
+                              u_indices, u_len - 1,
+                              v_indices, v_len - 1, 
+                              col_indices, col_elems, &numelems,
+                              lb, ub);
+
+         // sym_write_lp(master, "mastertest");
+         
+         // add_ray_constrs(master, df, disj, i, m, n,
+         //                      q_indices, q_len - 1,
+         //                      u_indices, u_len - 1,
+         //                      v_indices, v_len - 1,
+         //                      f_indices, f_len - 1, 
+         //                      col_indices, col_elems, &numelems,
+         //                      lb, ub);
+
+         // sym_write_lp(master, "mastertest");
+         
+         reset_lbub_from_disj(lb, ub, recourse->mip->lb, recourse->mip->ub,
+                              n, disj);
+      }
+
+      add_u_constr(master, u_indices, u_len, col_indices, col_elems, &numelems);
+         
+
+      // Fix beta variables
+      for (int j = 0; j < m; j++){
+         col_indices[numelems] = j + 1;
+         col_elems[numelems++] = 1;
+         sym_add_row(master, numelems, col_indices, col_elems, 'E', testRhs[j], 0);
+         clean_row_arrays(col_indices, col_elems, &numelems);
+      }
+
+      sym_write_lp(master, "mastertest");
+      // sym_set_int_param(master, "verbosity", 1);
+      sym_solve(master);
+
+      sym_get_obj_val(recourse, &warmObjVal);
+      
+      sym_get_obj_val(master, &warmObjVal);
+      printf("master obj val: %.5f\n", warmObjVal);
+      sym_close_environment(master);
+
+      assert(warmObjVal - testObjVal < 1e-5);
+      printf("========================\n", warmObjVal);
    }
    
    free(rhs);
