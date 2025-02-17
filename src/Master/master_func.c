@@ -4067,7 +4067,8 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 
 	// Save the path of dual solutions
 	if (ws->dual_func->disj){
-		if (ws->dual_func->disj[*prev_term].node == node){
+		if (((*prev_term) < ws->dual_func->num_terms) &&
+			(ws->dual_func->disj[*prev_term].node == node)){
 			prev_disj = ws->dual_func->disj[*prev_term];
 			// We reached a node that was a leaf in the previous iteration
 			if (prev_disj.duallen){
@@ -4439,9 +4440,10 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 				printf(" WARNING in collect_duals():\n");
 				printf("  No ray at this node!\n");
 			}
-		} else if (node->feasibility_status == OVER_UB_PRUNED){
+		} else if (node->feasibility_status == OVER_UB_PRUNED ||
+				  node->feasibility_status == INFEASIBLE_PRUNED){
 			// Either there is a ray proving unboundedness...
-			if (node->rays){
+			if (0 && node->rays){
 				if (ray_times_b < 1e-5){
 					printf(" WARNING in collect_duals():\n");
 					printf("  OVER_UB_PRUNED: Farkas proof at this node doesn't work!\n");
@@ -4451,7 +4453,10 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 				if (dualobj + ws->dual_func->granularity - ws->ub < 1e-5){
 					printf(" WARNING in collect_duals():\n");
 					printf("  bc node %d :", node->bc_index);
-					printf("  OVER_UB_PRUNED: dual obj val not over UB!\n");
+					if (node->feasibility_status == OVER_UB_PRUNED)
+						printf("  OVER_UB_PRUNED: dual obj val not over UB!\n");
+					if (node->feasibility_status == INFEASIBLE_PRUNED)
+						printf("  INFEASIBLE_PRUNED: dual obj val not over UB!\n");
 					printf("  dualobj = %.5f < %.5f = UB\n", dualobj, ws->ub);
 				}
 			}	
@@ -4505,7 +4510,8 @@ int build_dual_func(sym_environment *env)
 		ws->dual_func->dualsPolicy = DUALS_SAVE_ALL;
 		// ws->dual_func->dualsPolicy = DUALS_LEAF_ONLY;
 		// ws->dual_func->raysPolicy = RAYS_SAVE_ALL;
-		ws->dual_func->raysPolicy = RAYS_SAVE_DUALS;
+		ws->dual_func->raysPolicy = RAYS_SAVE_FARKAS;
+		// ws->dual_func->raysPolicy = RAYS_SAVE_DUALS;
 		ws->dual_func->granularity = env->par.tm_par.granularity;
 		ws->dual_func->rhashtb = NULL;
 		ws->dual_func->rays = NULL;

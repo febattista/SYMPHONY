@@ -2986,7 +2986,10 @@ int check_dual_solution(OsiXSolverInterface *si){
    // assert that recomputing djs does not change the 
    // objValue
    if (!si->isProvenPrimalInfeasible())
-      assert(fabs(lb - si->getObjValue()) < 0.00001);
+      if (!(fabs(lb - si->getObjValue()) < 0.00001)){
+         printf("LP solver obj value mismatch!\n");
+         assert(0);
+      }
   }
 
   delete[] new_dj;
