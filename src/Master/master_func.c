@@ -32,6 +32,7 @@
 #include "sym_pack_array.h"
 #include "sym_lp_solver.h"
 #include "sym_primal_heuristics.h"
+#include "sym_qsort.h"
 // #include "sym_lp.h"
 #include "sym_tm.h"
 
@@ -3957,6 +3958,7 @@ void print_dual_function(warm_start_desc *ws)
 }
 
 /*===========================================================================*/
+// HASH TABLE UTILITY FUNCTIONS
 
 int is_dual_new(dual_hash **hashtb, dual_hash *toAdd){
     dual_hash *s = NULL;
@@ -3994,6 +3996,7 @@ int is_ray_new(ray_hash **hashtb, ray_hash *toAdd){
 	return is_added;
 }
 
+/*===========================================================================*/
 
 #ifdef CHECK_DUAL_FUNC
 	int count_leaf = 0;
@@ -4003,10 +4006,8 @@ int is_ray_new(ray_hash **hashtb, ray_hash *toAdd){
 
 void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip, 
 				  branch_desc *bpath, disjunction_desc *new_disj, int* curr_term,
-				  int *prev_term,
-				  int *dual_idx, int duallen, 
-				  int *leaf_idx, int leaflen, 
-				  int *ray_idx, int raylen, 
+				  disjunction_desc *prev_disj, int *prev_term,
+				  int *duals_lst, int duallen, 
 				  int* curr_ray, int *rays_index_row, int *rays_index_col, double *rays_val,
 				  int* curr_piece, int *duals_index_row, int *duals_index_col, double *duals_val,
 				  int *nnz_duals, int *nnz_rays){
@@ -4027,6 +4028,8 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 	int level = node->bc_level, child_num = node->bobj.child_num;
 	int idx_this_dual = -1;
 	int  idx_this_ray = -1;
+	int leaflen = 0, raylen = 0;
+	int is_new;
 
 	double     dualobj = 0;
 	double ray_times_b = 0;
@@ -4038,7 +4041,7 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 	branch_obj *bobj;
 	dual_hash *dual;
 	ray_hash *ray;
-	disjunction_desc disj, prev_disj;
+	disjunction_desc disj;
 	
 	// if level>0, save the branching constraint
 	if (level > 0)
@@ -4065,39 +4068,12 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 		}
 	}
 
-	// Save the path of dual solutions
+	// Check with the previous disjunction
+	// when we reach a node that was a previous leaf
 	if (ws->dual_func->disj){
 		if (((*prev_term) < ws->dual_func->num_terms) &&
 			(ws->dual_func->disj[*prev_term].node == node)){
-			prev_disj = ws->dual_func->disj[*prev_term];
-			// We reached a node that was a leaf in the previous iteration
-			if (prev_disj.duallen){
-				// Copy the previous list of duals
-				memcpy(dual_idx, 
-				prev_disj.dual_idx, 
-				sizeof(int) * prev_disj.duallen);
-				duallen = prev_disj.duallen;
-			} 
-
-			if (prev_disj.leaflen){
-				// Copy the previous list of duals
-				if (!leaf_idx){
-					leaf_idx = (int*)malloc(sizeof(int) * prev_disj.leaflen);
-				}
-				memcpy(leaf_idx, 
-				prev_disj.leaf_idx, 
-				sizeof(int) * prev_disj.leaflen);
-				leaflen = prev_disj.leaflen;
-			} 
-			
-			if (prev_disj.raylen){
-				// Copy the rays also
-				memcpy(ray_idx, 
-				prev_disj.ray_idx, 
-				sizeof(int) * prev_disj.raylen);
-				raylen = prev_disj.raylen;
-			}
-
+			prev_disj = &(ws->dual_func->disj[*prev_term]);
 			(*prev_term)++;
 		} 
 	} 
@@ -4172,13 +4148,14 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 					FREE(dual);
 				}
 			}
-			if (child_num && (!duallen || dual_idx[duallen - 1] != idx_this_dual)){
-				dual_idx[duallen++] = idx_this_dual;
+			
+			if (child_num && idx_this_dual >= 0){
+				duals_lst[duallen++] = idx_this_dual;
 			}
 		}
 	}
 
-	// If this is a child, we have a term of the disjunction
+	// If this is a leaf, we have a term of the disjunction
 	if (!child_num)
 	{
 		// printf(" - %d Fesibility status of this leaf: %d\n", count_leaf, node->feasibility_status);
@@ -4190,7 +4167,9 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 			disj.lbvaridx = NULL;
 			disj.ub = NULL;
 			disj.ubvaridx = NULL;
-			disj.lblen = disj.ublen = 0;   
+			disj.lblen = disj.ublen = 0; 
+			disj.dual_idx = disj.leaf_idx = disj.ray_idx = NULL;
+			disj.duallen = disj.leaflen = disj.raylen = 0;  
 			lb = (double *)malloc(DSIZE * ws->n);
 			ub = (double *)malloc(DSIZE * ws->n);
 			memcpy(lb, mip->lb, DSIZE * ws->n);
@@ -4350,40 +4329,79 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 				}	
 				FREE(rayA);
 
-				if (!raylen || ray_idx[raylen - 1] != idx_this_ray){
-					ray_idx[raylen++] = idx_this_ray;
-				}
+				// rays_lst[raylen++] = idx_this_ray;
 			}	
 		}
-		
+
 		// Duals
-		disj.duallen = duallen;
-		disj.dual_idx = (int*)malloc(sizeof(int) * disj.duallen);
-		memcpy(disj.dual_idx, dual_idx, sizeof(int) * disj.duallen);
-		
-		// Duals at leaves
-		// TODO: deal with duplicates
-		if (idx_this_dual >= 0 && (!leaflen || leaf_idx[leaflen - 1] != idx_this_dual)){
-			disj.leaflen = leaflen + 1;
-			disj.leaf_idx = (int*)malloc(sizeof(int) * disj.leaflen);
-			// Add the new one
-			disj.leaf_idx[leaflen] = idx_this_dual;
-		} else {
-			disj.leaflen = leaflen;
-			disj.leaf_idx = (int*)malloc(sizeof(int) * disj.leaflen);
+		if (duallen){
+			disj.dual_idx = (int *)malloc(ISIZE * duallen);
+			memcpy(disj.dual_idx, duals_lst, ISIZE * duallen);
+			
+			// We must check for duplicates
+			qsort_i(disj.dual_idx, duallen);
+			int num_uniques = 1;
+			for (i = 1; i < duallen; i++){
+				if( disj.dual_idx[i] != disj.dual_idx[num_uniques - 1]){
+					disj.dual_idx[num_uniques++] = disj.dual_idx[i];
+				}
+			}
+			if (num_uniques != duallen){
+				disj.dual_idx = (int *)realloc(disj.dual_idx, ISIZE * num_uniques);
+			}
+
+			disj.duallen = num_uniques;
 		}
 		
-		// Copy the previous
-		if (leaf_idx){
-			memcpy(disj.leaf_idx, leaf_idx, sizeof(int) * leaflen);
+		// Leaves
+		leaflen = is_new = (idx_this_dual >= 0);
+		if (prev_disj && prev_disj->leaflen) {
+			if (is_new){
+				for (i = 0; i < prev_disj->leaflen; i++) {
+					if (prev_disj->leaf_idx[i] == idx_this_dual) {
+						is_new = 0;
+						break;
+					}
+				}
+			}
+			leaflen = prev_disj->leaflen + is_new;
+		}
+
+		if (leaflen) {
+			disj.leaflen = leaflen;
+			disj.leaf_idx = (int *)malloc(ISIZE * leaflen);
+			if (prev_disj && prev_disj->leaflen) {
+				memcpy(disj.leaf_idx, prev_disj->leaf_idx, ISIZE * prev_disj->leaflen);
+			}
+			if (idx_this_dual >= 0) {
+				disj.leaf_idx[leaflen - 1] = idx_this_dual;
+			}
 		}
 		
 		// Rays
-		disj.raylen = raylen;
-		disj.ray_idx = NULL;
-		if (disj.raylen){ 
-			disj.ray_idx = (int*)malloc(sizeof(int) * disj.raylen);
-			memcpy(disj.ray_idx, ray_idx, sizeof(int) * disj.raylen);
+		raylen = is_new = (idx_this_ray >= 0);
+		
+		if (prev_disj && prev_disj->raylen) {
+			if (is_new){
+				for (i = 0; i < prev_disj->raylen; i++) {
+					if (prev_disj->ray_idx[i] == idx_this_ray) {
+						is_new = 0;
+						break;
+					}
+				}
+			}
+			raylen = prev_disj->raylen + is_new;
+		}
+
+		if (raylen) {
+			disj.raylen = raylen;
+			disj.ray_idx = (int *)malloc(ISIZE * raylen);
+			if (prev_disj && prev_disj->raylen) {
+				memcpy(disj.ray_idx, prev_disj->ray_idx, ISIZE * prev_disj->raylen);
+			}
+			if (idx_this_ray >= 0) {
+				disj.ray_idx[raylen - 1] = idx_this_ray;
+			}
 		}
 		
 		new_disj[*curr_term] = disj;
@@ -4419,15 +4437,33 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 		printf("   %d Lower bound at this leaf: %.5f\n", count_leaf, node->lower_bound);
 		printf("   %d Dual Obj Val at this leaf: %.5f\n", count_leaf, dualobj);
 		printf("   %d Dual idx this leaf: %d\n", count_leaf, idx_this_dual);
-		printf("   %d Duals of this leaf: [ ", count_leaf);
-		for (int i = 0; i < disj.duallen; i++) printf("%d, ", disj.dual_idx[i]);
-		printf("]\n");
-		printf("   %d Leaf Duals of this leaf: [ ", count_leaf);
-		for (int i = 0; i < disj.leaflen; i++) printf("%d, ", disj.leaf_idx[i]);
-		printf("]\n");
-		printf("   %d Rays of this leaf: [ ", count_leaf++);
-		for (int i = 0; i < disj.raylen; i++) printf("%d, ", disj.ray_idx[i]);
-		printf("]\n");
+		printf("   %d Ray idx this leaf: %d\n", count_leaf, idx_this_ray);
+		if (disj.duallen){
+			printf("   %d Duals of this leaf: [ ", count_leaf);
+			for (int i = 0; i < disj.duallen; i++) printf("%d, ", disj.dual_idx[i]);
+			printf("]\n");
+		} else {
+			printf("   %d No duals at this leaf\n", count_leaf);
+		}
+		
+		if (disj.leaflen){
+			printf("   %d Leaf Duals of this leaf: [ ", count_leaf);
+			for (int i = 0; i < disj.leaflen; i++) printf("%d, ", disj.leaf_idx[i]);
+			printf("]\n");
+		} else {
+			printf("   %d No leaf Duals at this leaf\n", count_leaf);
+		}
+		
+		if (disj.raylen){
+			printf("   %d Rays of this leaf: [ ", count_leaf);
+			for (int i = 0; i < disj.raylen; i++) printf("%d, ", disj.ray_idx[i]);
+			printf("]\n");
+		} else {
+			printf("   %d No Rays at this leaf\n", count_leaf);
+		}
+
+		count_leaf++;
+		
 		reset_lbub_from_disj(lb, ub, mip->lb, mip->ub, ws->n, new_disj + ((*curr_term) - 1));
 		if (node->feasibility_status == INFEASIBLE_PRUNED){
 			// There must be a ray checking its primal infeasibility
@@ -4469,8 +4505,8 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 		// if child_num > 0, then do recursion on child nodes
 		for (j = 0; j < child_num; j++)
 			collect_duals_from_tree(env, node->children[j], mip,  
-				  bpath, new_disj, curr_term, prev_term,
-				  dual_idx, duallen, leaf_idx, leaflen, ray_idx, raylen, 
+				  bpath, new_disj, curr_term, prev_disj, prev_term,
+				  duals_lst, duallen,
 				  curr_ray, rays_index_row, rays_index_col, rays_val,
 				  curr_piece, duals_index_row, duals_index_col, duals_val,
 				  nnz_duals, nnz_rays);
@@ -4567,10 +4603,8 @@ int build_dual_func(sym_environment *env)
 
 	// branching path
 	branch_desc *bpath = (branch_desc *)malloc(sizeof(branch_desc) * (ws->stat.max_depth));
-	// Dual path
-	int *dual_idx = (int*)malloc(sizeof(int) * (ws->stat.max_depth + 1));
-	// Rays path
-	int *ray_idx  = (int*)malloc(sizeof(int) * (ws->stat.max_depth + 1));
+	// Duals path
+	int *duals_idx = (int *)malloc(ISIZE * (ws->stat.max_depth + 1));
 
 	int prev_term = 0;  // idx of previous leaves (not needed here)
 	int curr_term = 0;  // current disjunction term
@@ -4581,8 +4615,8 @@ int build_dual_func(sym_environment *env)
 	int curr_leaf = 0; // Debug: check the stati of leaves
 
 	collect_duals_from_tree(env, ws->rootnode, mip,  
-				  bpath, disj, &curr_term, &prev_term,
-				  dual_idx, 0, NULL, 0, ray_idx, 0, 
+				  bpath, disj, &curr_term, NULL, &prev_term, 
+				  duals_idx, 0,
 				  &curr_ray, rays_index_row, rays_index_col, rays_val,
 				  &curr_piece, duals_index_row, duals_index_col, duals_val,
 				  &nnz_duals, &nnz_rays);
@@ -4690,8 +4724,7 @@ int build_dual_func(sym_environment *env)
 	printf("Num unique non optimal Dual solutions: %d\n", count_over_ub);
 #endif
 	FREE(bpath);
-	FREE(dual_idx);
-	FREE(ray_idx);
+	FREE(duals_idx);
 	FREE(duals_index_row);
 	FREE(duals_index_col);
 	FREE(duals_val);
