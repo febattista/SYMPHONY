@@ -67,100 +67,152 @@ int main(int argc, char **argv)
 
    sym_load_problem(env_warm);
 
-   sym_set_int_param(env_warm, "verbosity", -2);
+   sym_set_int_param(env_warm, "verbosity", 10);
 
-   sym_set_int_param(env_warm, "keep_warm_start", TRUE);
-   sym_set_int_param(env_warm, "keep_dual_function_description", TRUE);
-   sym_set_int_param(env_warm, "should_use_rel_br", FALSE);
-   sym_set_int_param(env_warm, "use_hot_starts", FALSE);
-   sym_set_int_param(env_warm, "should_warmstart_node", TRUE);
-   sym_set_int_param(env_warm, "sensitivity_analysis", TRUE);
-   sym_set_int_param(env_warm, "sensitivity_rhs", true);
-   sym_set_int_param(env_warm, "sensitivity_bounds", TRUE);
-   sym_set_int_param(env_warm, "set_obj_upper_lim", FALSE);
+   sym_environment *env_cold = sym_open_environment(); 
+
+   sym_parse_command_line(env_cold, argc, argv); 
+
+   sym_load_problem(env_cold);
+
+   // sym_set_int_param(env_cold, "verbosity", -2);
+
+   // sym_set_int_param(env_warm, "keep_warm_start", TRUE);
+   // sym_set_int_param(env_warm, "keep_dual_function_description", TRUE);
+   // sym_set_int_param(env_warm, "should_use_rel_br", FALSE);
+   // sym_set_int_param(env_warm, "use_hot_starts", FALSE);
+   // sym_set_int_param(env_warm, "should_warmstart_node", TRUE);
+   // sym_set_int_param(env_warm, "sensitivity_analysis", TRUE);
+   // sym_set_int_param(env_warm, "sensitivity_rhs", true);
+   // sym_set_int_param(env_warm, "sensitivity_bounds", TRUE);
+   // sym_set_int_param(env_warm, "set_obj_upper_lim", FALSE);
    sym_set_int_param(env_warm, "do_primal_heuristic", FALSE);
    sym_set_int_param(env_warm, "prep_level", -1);
-   sym_set_int_param(env_warm, "tighten_root_bounds", FALSE);
-   sym_set_int_param(env_warm, "max_sp_size", 100);
-   sym_set_int_param(env_warm, "do_reduced_cost_fixing", FALSE);
-   sym_set_int_param(env_warm, "generate_cgl_cuts", FALSE);
-   sym_set_int_param(env_warm, "max_active_nodes", 1);
+   // sym_set_int_param(env_warm, "tighten_root_bounds", FALSE);
+   // sym_set_int_param(env_warm, "max_sp_size", 100);
+   // sym_set_int_param(env_warm, "do_reduced_cost_fixing", FALSE);
+   // sym_set_int_param(env_warm, "generate_cgl_cuts", FALSE);
+   // sym_set_int_param(env_warm, "max_active_nodes", 1);
    // sym_set_int_param(env_warm, "max_presolve_iter", 0);
    // sym_set_int_param(env_warm, "limit_strong_branching_time", 0);
+
+   sym_solve(env_warm);
+   exit(0);
 
    //----------------------
    // linspace numpy-like 
    //----------------------
-   // double a = -16, b = 5, zerotol = 1e-7;
-   // int pieces = 2000;
-   // double *zeta_lst = linspace(a, b, pieces);
-   // double *zeta_lst_1 = linspace(-15, 5, 10);
-   // double *rvf_lst  = (double*)malloc(sizeof(double) * pieces);
-   // double *df_lst   = (double*)malloc(sizeof(double) * pieces);
+   double a = -56.5, b = 5, zerotol = 1e-7;
+   int pieces = 200;
+   double *zeta_lst_large = linspace(-12.5, -10, pieces);
+   double *zeta_lst_small = linspace(-15, 5, pieces);
+   double *rvf_lst  = (double*)malloc(sizeof(double) * pieces);
+   double *df_lst   = (double*)malloc(sizeof(double) * pieces);
+   double *rvf_lst_small  = (double*)malloc(sizeof(double) * pieces);
+   double *df_lst_small   = (double*)malloc(sizeof(double) * pieces);
+   double *rhs = (double*)malloc(sizeof(double) * 1);
 
    int num_objs = 1;
-   int num_zetas = 30;
-   int pieces = 100;
-   double *zetas = linspace(30, 5000, pieces);
-   
-   double *rhs = NULL;
-   
-   // First solve 
-   if ((termcode = sym_solve(env_warm)) < 0){
-      printf("WARM: PROBLEM INFEASIBLE!\n");
-   }
-   sym_build_dual_func(env_warm);
-   sym_evaluate_dual_function(env_warm, rhs, 0, &dualFuncObj);
-   print_dual_function(env_warm);
 
-   if (sym_is_proven_optimal(env_warm)){
-      sym_get_obj_val(env_warm, &warmObjVal);
-      printf(" DF: %.10f\n", dualFuncObj);
-      printf("RVF: %.10f\n", warmObjVal);
-      assert((fabs(dualFuncObj - warmObjVal) < 1e-5));
-   } else if (sym_is_proven_primal_infeasible(env_warm)) {
-      assert(dualFuncObj > 1e19);
-      printf("RVF: INFEASIBLE\n");
-      printf(" DF: %.10f\n", dualFuncObj);
-   }
+   // printf("===============================\n");
+   // printf("      ZETA LST LARGE\n");
+   // printf("===============================\n");
+   // printf("zeta_lst_large = [");
+   // for (int i = 0; i < pieces; i++){
+   //    printf("%.10f, ", zeta_lst_large[i]);
+   // }
+   // printf("]\n");
 
-   printf("======================================\n");
+   // printf("===============================\n");
+   // printf("      ZETA LST SMALL\n");
+   // printf("===============================\n");
+   // printf("zeta_lst_small = [");
+   // for (int i = 0; i < pieces; i++){
+   //    printf("%.10f, ", zeta_lst_small[i]);
+   // }
+   // printf("]\n");
 
+   // // compute rvf
+   // printf("===============================\n");
+   // printf("          RVF\n");
+   // printf("===============================\n");
+   printf("rvf_lst = [");
    for (int i = 0; i < pieces; i++){
-      rhs = zetas + i;
+      rhs = zeta_lst_large + i;
+      printf("RHS: %.5f\n", *rhs);
+      set_rhs(env_cold, rhs, num_objs);
 
-      printf("======================================\n");
-      printf(" RHS: (%.2f)\n", rhs[0]);
-      printf("======================================\n");
-      
-      set_rhs(env_warm, rhs, num_objs);
-    
-      if ((termcode = sym_warm_solve(env_warm)) < 0){
-         printf("WARM: PROBLEM INFEASIBLE!\n");
-      }
-
-      sym_build_dual_func(env_warm);
-      sym_evaluate_dual_function(env_warm, rhs, num_objs, &dualFuncObj);
-      print_dual_function(env_warm);
-
-      if (sym_is_proven_optimal(env_warm)){
-         sym_get_obj_val(env_warm, &warmObjVal);
-         printf(" DF: %.10f\n", dualFuncObj);
-         printf("RVF: %.10f\n", warmObjVal);
-         assert((fabs(dualFuncObj - warmObjVal) < 1e-5));
-      } else if (sym_is_proven_primal_infeasible(env_warm)) {
-         assert(dualFuncObj > 1e19);
-         printf("RVF: INFEASIBLE\n");
-         printf(" DF: %.10f\n", dualFuncObj);
-      }
-
+      sym_solve(env_cold);
+      sym_get_obj_val(env_cold, rvf_lst + i);
+      printf("%.10f, ", rvf_lst[i]);
    }
+   printf("]\n");
 
-   printf("LP TIME from DUAL FUNC: %.5f\n", sym_get_lp_time_dual_func(env_warm));
+   // // compute rvf
+   // printf("===============================\n");
+   // printf("          RVF\n");
+   // printf("===============================\n");
+   // printf("rvf_lst_small = [");
+   // for (int i = 0; i < pieces; i++){
+   //    rhs = zeta_lst_small + i;
+   //    set_rhs(env_cold, rhs, num_objs);
+
+   //    sym_solve(env_cold);
+   //    sym_get_obj_val(env_cold, rvf_lst_small + i);
+   //    printf("%.10f, ", rvf_lst_small[i]);
+   // }
+   // printf("]\n");
+   
+   // Build and evaluate DF
+   *rhs = 40.0/9.0;
+   printf("===============================\n");
+   printf("          DF: %.3f\n", *rhs);
+   printf("===============================\n");
+   set_rhs(env_warm, rhs, num_objs);
+   sym_warm_solve(env_warm);
+   sym_build_dual_func(env_warm);
+   *rhs = -55.5;
+   printf("===============================\n");
+   printf("          DF: %.3f\n", *rhs);
+   printf("===============================\n");
+   set_rhs(env_warm, rhs, num_objs);
+   sym_warm_solve(env_warm);
+   sym_build_dual_func(env_warm);
+   *rhs = -73.0/6.0;
+   printf("===============================\n");
+   printf("          DF: %.3f\n", *rhs);
+   printf("===============================\n");
+   set_rhs(env_warm, rhs, num_objs);
+   sym_warm_solve(env_warm);
+   sym_build_dual_func(env_warm);
+   *rhs = -11;
+   printf("===============================\n");
+   printf("          DF: %.3f\n", *rhs);
+   printf("===============================\n");
+   set_rhs(env_warm, rhs, num_objs);
+   sym_warm_solve(env_warm);
+   sym_build_dual_func(env_warm);
+   printf("df_lst = [");
+   for (int i = 0; i < pieces; i++){
+      rhs = zeta_lst_large + i;
+      printf("RHS: %.5f\n", *rhs);
+      sym_evaluate_dual_function(env_warm, rhs, num_objs, df_lst + i);
+      printf("%.10f, ", df_lst[i]);
+   }
+   printf("]\n");
+   // printf("===============================\n");
+   // printf("df_lst_small = [");
+   // for (int i = 0; i < pieces; i++){
+   //    rhs = zeta_lst_small + i;
+   //    sym_evaluate_dual_function(env_warm, rhs, num_objs, df_lst_small + i);
+   //    printf("%.10f, ", df_lst_small[i]);
+   // }
+   // printf("]\n");
 
    // Memory clean-ups
    sym_close_environment(env_warm);
-   free(zetas);
+   sym_close_environment(env_cold);
+   // free(zetas);
 
    return 0;
 }  

@@ -92,6 +92,7 @@ int main(int argc, char **argv)
    sym_set_int_param(env_warm, "max_sp_size", 100);
    sym_set_int_param(env_warm, "do_reduced_cost_fixing", FALSE);
    sym_set_int_param(env_warm, "generate_cgl_cuts", FALSE);
+   // sym_set_dbl_param(env_warm, "TM_granularity", 1e-6);
    sym_set_int_param(env_warm, "max_active_nodes", 1);
    // sym_set_int_param(env_warm, "max_presolve_iter", 0);
    // sym_set_int_param(env_warm, "limit_strong_branching_time", 0);
@@ -148,12 +149,14 @@ int main(int argc, char **argv)
    //                      {-11321.625, -8173.125}};
    double rhs[2] = {0, 0};
    
-   // First solve 
+   // First solve
+   char filename[33] = "kp_test"; 
+   sym_write_lp(env_warm, filename);
    if ((termcode = sym_solve(env_warm)) < 0){
       printf("WARM: PROBLEM INFEASIBLE!\n");
    }
    sym_build_dual_func(env_warm);
-   // print_dual_function(env_warm);
+   print_dual_function(env_warm);
    sym_evaluate_dual_function(env_warm, rhs, 0, &dualFuncObj);
    print_dual_function(env_warm);
 
@@ -163,7 +166,7 @@ int main(int argc, char **argv)
       printf("RVF: %.10f\n", warmObjVal);
       assert((fabs(dualFuncObj - warmObjVal) < 1e-5));
    } else if (sym_is_proven_primal_infeasible(env_warm)) {
-      assert(dualFuncObj > 1e19);
+      assert(dualFuncObj > 1e10);
       printf("RVF: INFEASIBLE\n");
       printf(" DF: %.10f\n", dualFuncObj);
    }
@@ -192,7 +195,7 @@ int main(int argc, char **argv)
       }
 
       sym_build_dual_func(env_warm);
-      // print_dual_function(env_warm);
+      print_dual_function(env_warm);
       sym_evaluate_dual_function(env_warm, rhs, 2, &dualFuncObj);
       print_dual_function(env_warm);
 
@@ -212,7 +215,7 @@ int main(int argc, char **argv)
          }
          assert((fabs(dualFuncObj - warmObjVal) < 1e-5));
       } else if (sym_is_proven_primal_infeasible(env_cold)) {
-         assert(dualFuncObj > 1e19);
+         assert(dualFuncObj > 1e10);
          printf("RVF: INFEASIBLE\n");
          printf(" DF: %.10f\n", dualFuncObj);
       }

@@ -509,6 +509,20 @@ int resolve_node(sym_environment *env, bc_node *node)
 			}
 			memcpy(node->rays, lp_data->raysol, (lp_data->maxm) * DSIZE);
 		}
+		// feb223
+		if (lp_data->dualsol)
+		{
+			if (!node->duals)
+			{
+				node->duals = (double *)malloc(lp_data->m * DSIZE);
+			}
+			if (!node->dj)
+			{
+				node->dj = (double *)malloc(lp_data->n * DSIZE);
+			}
+			memcpy(node->duals, lp_data->dualsol, lp_data->m * DSIZE);
+			memcpy(node->dj, lp_data->dj, lp_data->n * DSIZE);
+		}
 #endif
 	}
 
@@ -3786,6 +3800,55 @@ int get_tree_statistics(bc_node *node, int *num_leaves, int *num_rays)
 
 /*===========================================================================*/
 
+int check_dual_solution(sym_environment *env, bc_node *node){
+	int i, j;
+	MIPdesc *mip = env->mip;
+	warm_start_desc *ws = env->warm_start;
+	int *matbeg = mip->matbeg;
+	int *matind = mip->matind;
+	double *matval = mip->matval;
+	int nz = mip->nz, start, end;
+	int is_dual_feas = TRUE;
+
+	double *piA = (double *)calloc(ws->n, DSIZE);
+
+	for (i = 0; i < ws->n; i++){
+		start = matbeg[i];
+		end = (i < ws->n - 1) ? matbeg[i + 1] : nz;
+		for (j = start; j < end; j++){
+			piA[i] += node->duals[matind[j]] * matval[j];
+		}
+		if (piA[i] + node->dj[i] - mip->obj[i] > 1e-5) {
+			is_dual_feas = FALSE;
+			break;
+		}
+	}
+
+	clock_t start_t, end_t;
+	double cpu_time_used;
+	start_t = clock();
+
+	if (!is_dual_feas){
+		// printf(" bc_node %d has dual infeasible solution!\n", node->bc_index);
+		resolve_node(env, node);
+		
+		// if (check_dual_solution(env, node)){
+		// 	printf(" bc_node %d is dual feasible after resolve!\n", node->bc_index);
+		// } else {
+		// 	printf("     Still infeasible!\n");
+		// 	assert(0);
+		// }
+	}
+	end_t = clock();
+	cpu_time_used = ((double) (end_t - start_t)) / CLOCKS_PER_SEC;
+	ws->dual_func->lp_cpu_time += cpu_time_used;
+
+	FREE(piA);
+
+	return is_dual_feas;
+}
+
+
 int change_lbub_from_disj(double *lb, double *ub, int n, disjunction_desc* disj){
 	int i, idx;
 	// Fill the lb
@@ -3908,42 +3971,42 @@ void print_dual_function(warm_start_desc *ws)
    	// 	}
 	// }
 
-	CoinPackedMatrix *duals = ws->dual_func->duals;
-	printf("===============================\n");
-	printf("DUAL SOLUTIONS + REDUCED COSTS \n");
-	printf("===============================\n");
+	// CoinPackedMatrix *duals = ws->dual_func->duals;
+	// printf("===============================\n");
+	// printf("DUAL SOLUTIONS + REDUCED COSTS \n");
+	// printf("===============================\n");
 
-	if (ws->dual_func->num_pieces == 0){
-		printf("No Dual Solutions!");
-		printf("\n------------------------\n");
-	} else {
-		elem = duals->getElements();
-		indices = duals->getIndices();
-		major = duals->getMajorDim();
-		minor = duals->getMinorDim();
-		num_elem = duals->getNumElements();
-		ord = duals->isColOrdered();
-		for (int i = 0; i < major; i++){
-			const CoinBigIndex last = duals->getVectorLast(i);
-			for (CoinBigIndex j = duals->getVectorFirst(i); j < last; ++j){
-				printf("%d : %.10f, ", indices[j] < ws->m ? indices[j] : indices[j] /*- ws->m*/, elem[j]);
-			}
-			printf("\n------------------------\n");
-   		}
-	}
+	// if (ws->dual_func->num_pieces == 0){
+	// 	printf("No Dual Solutions!");
+	// 	printf("\n------------------------\n");
+	// } else {
+	// 	elem = duals->getElements();
+	// 	indices = duals->getIndices();
+	// 	major = duals->getMajorDim();
+	// 	minor = duals->getMinorDim();
+	// 	num_elem = duals->getNumElements();
+	// 	ord = duals->isColOrdered();
+	// 	for (int i = 0; i < major; i++){
+	// 		const CoinBigIndex last = duals->getVectorLast(i);
+	// 		for (CoinBigIndex j = duals->getVectorFirst(i); j < last; ++j){
+	// 			printf("%d : %.10f, ", indices[j] < ws->m ? indices[j] : indices[j] /*- ws->m*/, elem[j]);
+	// 		}
+	// 		printf("\n------------------------\n");
+   	// 	}
+	// }
     
 	
-	printf("==========================\n");
-	printf("DISJUNCTION\n");
-	printf("==========================\n");
-	if (ws->dual_func->num_terms == 0){
-		printf("Only root node in the B&B Tree!\n");
-	} else {
-		for (int i = 0; i < ws->dual_func->num_terms; i++)
-		{
-			printDisjunction(ws->dual_func->disj[i]);
-		}
-	}
+	// printf("==========================\n");
+	// printf("DISJUNCTION\n");
+	// printf("==========================\n");
+	// if (ws->dual_func->num_terms == 0){
+	// 	printf("Only root node in the B&B Tree!\n");
+	// } else {
+	// 	for (int i = 0; i < ws->dual_func->num_terms; i++)
+	// 	{
+	// 		printDisjunction(ws->dual_func->disj[i]);
+	// 	}
+	// }
 	
 
 	// printf("==========================\n");
@@ -3963,7 +4026,7 @@ void print_dual_function(warm_start_desc *ws)
 int is_dual_new(dual_hash **hashtb, dual_hash *toAdd){
     dual_hash *s = NULL;
 	int is_added = 0;
-	int len = sizeof(int) * toAdd->len;
+	int len = sizeof(long int) * toAdd->len;
     // HASH_FIND(hh, *hashtb, toAdd->basis_idx, len, s);
 	HASH_FIND(hh, *hashtb, toAdd->dual, len, s);
     if (s == NULL){
@@ -3982,7 +4045,7 @@ int is_dual_new(dual_hash **hashtb, dual_hash *toAdd){
 int is_ray_new(ray_hash **hashtb, ray_hash *toAdd){
 	ray_hash *s = NULL;
 	int is_added = 0;
-	int len = sizeof(int) * toAdd->len;
+	int len = sizeof(long int) * toAdd->len;
     HASH_FIND(hh, *hashtb, toAdd->ray, len, s);
     if (s == NULL){
         s = toAdd;
@@ -4021,6 +4084,11 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 	// if (!node->parent) count_leaf = 0;
 
 	warm_start_desc *ws = env->warm_start;
+	
+	int *matbeg = mip->matbeg;
+	int *matind = mip->matind;
+	double *matval = mip->matval;
+	int nz = mip->nz, start, end;
 
 	int i, j, k, l;
 	int varidx, nnz = 0;
@@ -4029,18 +4097,22 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 	int idx_this_dual = -1;
 	int  idx_this_ray = -1;
 	int leaflen = 0, raylen = 0;
-	int is_new;
+	int is_new, should_free_this_dual = FALSE;
 
 	double     dualobj = 0;
 	double ray_times_b = 0;
 	double     zerotol = 1e-9;
+	double	   lambda = 1e10; // To scale the dual ray
 
 	double *lb = NULL;
 	double *ub = NULL;
 
+	double *this_dual = NULL;
+	double *this_djs = NULL;
+
 	branch_obj *bobj;
-	dual_hash *dual;
-	ray_hash *ray;
+	dual_hash *dualhash;
+	ray_hash *rayhash;
 	disjunction_desc disj;
 	
 	// if level>0, save the branching constraint
@@ -4093,20 +4165,36 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 		  (ws->dual_func->raysPolicy != RAYS_SAVE_FARKAS || !node->rays) &&
 		 ((ws->dual_func->dualsPolicy == DUALS_SAVE_ALL) ||
 		  (ws->dual_func->dualsPolicy == DUALS_LEAF_ONLY && !child_num)))
-		{
+		{	
+
+			this_dual = node->duals;
+			this_djs = node->dj;
+			
+			if ((node->rays) &&
+				(ws->dual_func->raysPolicy != RAYS_SAVE_FARKAS) && 
+				(node->feasibility_status == INFEASIBLE_PRUNED || 
+				 node->feasibility_status == OVER_UB_PRUNED)){
+				// Take the Farkas proof and get a dual ray
+				// out of it
+				this_dual = node->rays;
+				// We compute the djs of the dual ray only if it 
+				// is new
+				this_djs = NULL;
+			} 
+
 			// Prepare the hash for the dual sol
-			dual = NULL;
-			dual = (dual_hash *)malloc(sizeof(dual_hash));
-			dual->dual = (int *)calloc(ws->m, ISIZE);
+			dualhash = NULL;
+			dualhash = (dual_hash *)malloc(sizeof(dual_hash));
+			dualhash->dual = (long int *)calloc(ws->m, sizeof(long int));
 			for (int i = 0; i < ws->m; i++){
-				if (fabs(node->duals[i]) > 1e-6){
-					dual->dual[i] = node->duals[i] * 1e6;
+				if (fabs(this_dual[i]) > 1e-6){
+					dualhash->dual[i] = this_dual[i] * 1e6;
 				}
 			}
-			dual->len = ws->m;
-			dual->row_idx = ws->dual_func->num_pieces + (*curr_piece);
+			dualhash->len = ws->m;
+			dualhash->row_idx = ws->dual_func->num_pieces + (*curr_piece);
 
-			if ((dual && is_dual_new(&(ws->dual_func->dhashtb), dual))){
+			if ((dualhash && is_dual_new(&(ws->dual_func->dhashtb), dualhash))){
 				// successfully added, collect reduced costs
 				// find nnzs and fill reduced costs related structures
 #ifdef CHECK_DUAL_FUNC
@@ -4115,37 +4203,68 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 				    node->feasibility_status == ROOT_NODE ||
 					node->feasibility_status == NODE_BRANCHED_ON) count_optimal++;
 #endif
+				if (!this_djs){
+					// We have a dual ray
+					// Make sure we have a dual feasible solution
+					// If not, we should resolve the node
+					// But we might use any dual solution
+					// and avoid to solve an addition LP from scratch
+					// check_dual_solution(env, node);
+					this_dual = (double *)malloc(ws->m * DSIZE);
+					should_free_this_dual = TRUE;
+					// With a bit of a hack, we use the dual solution 
+					// of the root node
+					for (i = 0; i < ws->m; i++){
+						this_dual[i] = ws->rootnode->duals[i] - lambda * node->rays[i]; 
+					}
+
+					this_djs = (double *)calloc(ws->n, DSIZE);
+					for (i = 0; i < ws->n; i++){
+						start = matbeg[i];
+						end = matbeg[i + 1];
+						for (j = start; j < end; j++){
+							this_djs[i] += node->rays[matind[j]] * matval[j];
+						}
+						this_djs[i] = ws->rootnode->dj[i] + lambda * this_djs[i];
+					}
+				}
+
 				for (i = 0; i < ws->m; i++)
 				{
-					if (fabs(node->duals[i]) >= zerotol)
+					if (fabs(this_dual[i]) >= zerotol)
 					{
 						duals_index_row[*nnz_duals] = *curr_piece;
 						duals_index_col[*nnz_duals] = i;
-						duals_val[*nnz_duals] = node->duals[i];
+						duals_val[*nnz_duals] = this_dual[i];
 						(*nnz_duals)++;
 					}
 				}
 				
 				for (i = 0; i < ws->n; i++)
 				{
-					if (fabs(node->dj[i]) >= zerotol)
+					if (fabs(this_djs[i]) >= zerotol)
 					{
 						duals_index_row[*nnz_duals] = *curr_piece;
 						duals_index_col[*nnz_duals] = ws->m + i;
-						duals_val[*nnz_duals] = node->dj[i];
+						duals_val[*nnz_duals] = this_djs[i];
 						(*nnz_duals)++;
 					}
 				}
 				// This is the actual row_idx in the matrix
-				idx_this_dual = dual->row_idx;
+				idx_this_dual = dualhash->row_idx;
 				(*curr_piece)++;
+
+				if (should_free_this_dual){
+					FREE(this_dual);
+					FREE(this_djs);
+				}
 
 			} else {
 				// This dual is a duplicate, we can FREE it
-				if (dual){
-					idx_this_dual = dual->row_idx;
-					FREE(dual->dual);
-					FREE(dual);
+				if (dualhash){
+					idx_this_dual = dualhash->row_idx;
+					FREE(dualhash->dual);
+					FREE(dualhash);
 				}
 			}
 			
@@ -4246,52 +4365,19 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 			}
 #endif
 			if (node->rays){
-				// ray * A
-				double *rayA = (double *)calloc(ws->n, DSIZE);
-				
-				// A is row ordered in MIPdesc
-				int *matbeg = mip->matbeg;
-				int *matind = mip->matind;
-				double *matval = mip->matval;
-				int nz = mip->nz, start, end;
-
-				for (i = 0; i < ws->n; i++){
-					start = matbeg[i];
-					end = (i < ws->n - 1) ? matbeg[i + 1] : nz;
-					for (j = start; j < end; j++){
-						rayA[i] += node->rays[matind[j]] * matval[j];
-					}
-				}
-
-				for (int i = 0; i < ws->m; i++){
-					ray_times_b -= node->rays[i] * mip->rhs[i];
-				}
-
-				for (int i = 0; i < ws->n; i++){
-					if (rayA[i] > zerotol){
-						ray_times_b += rayA[i] * lb[i];
-					} 
-					else if (rayA[i] < -zerotol){
-						ray_times_b += rayA[i] * ub[i];
-					}
-				}
-
 				// Prepare the hash for the ray
-				ray = NULL;
+				rayhash = NULL;
 				
-				ray = (ray_hash *)malloc(sizeof(ray_hash));
-				ray->ray = (int *)malloc(ISIZE * (ws->m + ws->n));
+				rayhash = (ray_hash *)malloc(sizeof(ray_hash));
+				rayhash->ray = (long int*)malloc(sizeof(long int) * (ws->m));
 				for (i = 0; i < ws->m; i++){
-					ray->ray[i] = (int)(node->rays[i] * 1e7);
+					rayhash->ray[i] = (long int)(node->rays[i] * 1e7);
 				}
-				for (i = 0; i < ws->n; i++){
-					ray->ray[ws->m + i] = (int)(rayA[i] * 1e7);
-				}
-				ray->len = ws->m + ws->n;
-				ray->row_idx = ws->dual_func->num_rays + (*curr_ray);
+				rayhash->len = ws->m;
+				rayhash->row_idx = ws->dual_func->num_rays + (*curr_ray);
 					
 				// try to add this ray into the hashtable
-				if (is_ray_new(&(ws->dual_func->rhashtb), ray)){
+				if (is_ray_new(&(ws->dual_func->rhashtb), rayhash)){
 					// successfully added, collect ray
 					// find nnzs and fill arrays
 					for (i = 0; i < ws->m; i++)
@@ -4302,6 +4388,16 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 							rays_index_col[*nnz_rays] = i;
 							rays_val[*nnz_rays] = node->rays[i];
 							(*nnz_rays)++;
+						}
+					}
+
+					double *rayA = (double *)calloc(ws->n, DSIZE);
+
+					for (i = 0; i < ws->n; i++){
+						start = matbeg[i];
+						end = (i < ws->n - 1) ? matbeg[i + 1] : nz;
+						for (j = start; j < end; j++){
+							rayA[i] += node->rays[matind[j]] * matval[j];
 						}
 					}
 					
@@ -4316,24 +4412,24 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 						}
 					}
 					// This is the actual row_idx in the matrix
-					idx_this_ray = ray->row_idx;
-
+					idx_this_ray = rayhash->row_idx;
 					(*curr_ray)++;
+					
+					FREE(rayA);
+
 				} else {
 					// This ray is a duplicate, we can FREE it
-					if (ray){
-						idx_this_ray = ray->row_idx;
-						FREE(ray->ray);
-						FREE(ray);
+					if (rayhash){
+						idx_this_ray = rayhash->row_idx;
+						FREE(rayhash->ray);
+						FREE(rayhash);
 					}
 				}	
-				FREE(rayA);
-
-				// rays_lst[raylen++] = idx_this_ray;
 			}	
 		}
 
 		// Duals
+#if 0
 		if (duallen){
 			disj.dual_idx = (int *)malloc(ISIZE * duallen);
 			memcpy(disj.dual_idx, duals_lst, ISIZE * duallen);
@@ -4352,7 +4448,7 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 
 			disj.duallen = num_uniques;
 		}
-		
+#endif		
 		// Leaves
 		leaflen = is_new = (idx_this_dual >= 0);
 		if (prev_disj && prev_disj->leaflen) {
@@ -4373,7 +4469,7 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 			if (prev_disj && prev_disj->leaflen) {
 				memcpy(disj.leaf_idx, prev_disj->leaf_idx, ISIZE * prev_disj->leaflen);
 			}
-			if (idx_this_dual >= 0) {
+			if (idx_this_dual >= 0 && is_new) {
 				disj.leaf_idx[leaflen - 1] = idx_this_dual;
 			}
 		}
@@ -4399,7 +4495,7 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 			if (prev_disj && prev_disj->raylen) {
 				memcpy(disj.ray_idx, prev_disj->ray_idx, ISIZE * prev_disj->raylen);
 			}
-			if (idx_this_ray >= 0) {
+			if (idx_this_ray >= 0  && is_new) {
 				disj.ray_idx[raylen - 1] = idx_this_ray;
 			}
 		}
@@ -4431,6 +4527,34 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 				dualobj += lb[i] * node->dj[i];
 			else if (node->dj[i] < -1e-5)
 				dualobj += ub[i] * node->dj[i];
+		}
+
+		if ((node->feasibility_status == INFEASIBLE_PRUNED ||
+			node->feasibility_status == OVER_UB_PRUNED) && node->rays){
+			// ray * A
+			double *rayA = (double *)calloc(ws->n, DSIZE);
+
+			for (i = 0; i < ws->n; i++){
+				start = matbeg[i];
+				end = (i < ws->n - 1) ? matbeg[i + 1] : nz;
+				for (j = start; j < end; j++){
+					rayA[i] += node->rays[matind[j]] * matval[j];
+				}
+			}
+
+			for (int i = 0; i < ws->m; i++){
+				ray_times_b -= node->rays[i] * mip->rhs[i];
+			}
+
+			for (int i = 0; i < ws->n; i++){
+				if (rayA[i] > zerotol){
+					ray_times_b += rayA[i] * lb[i];
+				} 
+				else if (rayA[i] < -zerotol){
+					ray_times_b += rayA[i] * ub[i];
+				}
+			}
+			FREE(rayA);
 		}
 
 		printf(" - %d Fesibility status of this leaf: %d\n", count_leaf, node->feasibility_status);
@@ -4479,7 +4603,7 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 		} else if (node->feasibility_status == OVER_UB_PRUNED ||
 				  node->feasibility_status == INFEASIBLE_PRUNED){
 			// Either there is a ray proving unboundedness...
-			if (0 && node->rays){
+			if (node->rays){
 				if (ray_times_b < 1e-5){
 					printf(" WARNING in collect_duals():\n");
 					printf("  OVER_UB_PRUNED: Farkas proof at this node doesn't work!\n");
@@ -4546,8 +4670,8 @@ int build_dual_func(sym_environment *env)
 		ws->dual_func->dualsPolicy = DUALS_SAVE_ALL;
 		// ws->dual_func->dualsPolicy = DUALS_LEAF_ONLY;
 		// ws->dual_func->raysPolicy = RAYS_SAVE_ALL;
-		ws->dual_func->raysPolicy = RAYS_SAVE_FARKAS;
-		// ws->dual_func->raysPolicy = RAYS_SAVE_DUALS;
+		// ws->dual_func->raysPolicy = RAYS_SAVE_FARKAS;
+		ws->dual_func->raysPolicy = RAYS_SAVE_DUALS;
 		ws->dual_func->granularity = env->par.tm_par.granularity;
 		ws->dual_func->rhashtb = NULL;
 		ws->dual_func->rays = NULL;

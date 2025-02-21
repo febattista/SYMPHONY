@@ -920,7 +920,7 @@ typedef struct MIPDESC{
 // uthash.h hashtable is used to keep unique dual solutions
 typedef struct DUAL_HASH {
    //  int           *basis_idx; // idx of basic vars and slacks
-    int           *dual;
+    long int      *dual;
     int            len;       // length of basis_idx
     int            row_idx;   /* this is the idx of the row 
                                  where this dual is in CoinPackedMatrix duals */
@@ -928,7 +928,7 @@ typedef struct DUAL_HASH {
 } dual_hash;
 
 typedef struct RAY_HASH {
-    int           *ray; 
+    long int      *ray; 
     int            len; 
     int            row_idx;   /* this is the idx of the row 
                                  where this ray is in CoinPackedMatrix rays */      
