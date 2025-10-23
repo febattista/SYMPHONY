@@ -592,6 +592,10 @@
 #define DUALS_SAVE_ALL 0
 #define DUALS_LEAF_ONLY 1
 
+/*----------------- Policy to evaluate the dual function -------------------*/
+#define USE_DUALS_AND_RAYS_FROM_ONE_DISJ_TERM 0
+#define USE_DUALS_AND_RAYS_FROM_ALL_DISJ_TERM 1
+
 /*----------- Policy to save rays from infeasible nodes ---------------*/
 #define RAYS_SAVE_FARKAS 0    /* Save Farkas duals to prove 
                                  infeasibility of a node */

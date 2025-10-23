@@ -3692,13 +3692,24 @@ void free_master(sym_environment *env)
 #ifdef SENSITIVITY_ANALYSIS 
 		if(env->warm_start->dual_func){
 
-			if (env->warm_start->dual_func->duals)
-				delete env->warm_start->dual_func->duals;
+			if (env->warm_start->dual_func->duals_pi)
+				delete env->warm_start->dual_func->duals_pi;
+			
+			if (env->warm_start->dual_func->duals_dj_pos)
+				delete env->warm_start->dual_func->duals_dj_pos;
 
-			if (env->warm_start->dual_func->rays)
-				delete env->warm_start->dual_func->rays;
+			if (env->warm_start->dual_func->duals_dj_neg)
+				delete env->warm_start->dual_func->duals_dj_neg;
 
-				
+			if (env->warm_start->dual_func->rays_pi)
+				delete env->warm_start->dual_func->rays_pi;
+
+			if (env->warm_start->dual_func->rays_dj_pos)
+				delete env->warm_start->dual_func->rays_dj_pos;
+			
+			if (env->warm_start->dual_func->rays_dj_neg)
+				delete env->warm_start->dual_func->rays_dj_neg;
+
 			free_disjunction(env->warm_start->dual_func);
 
 			dual_hash *tmp1, *curr1;
@@ -3996,17 +4007,17 @@ void print_dual_function(warm_start_desc *ws)
 	// }
     
 	
-	// printf("==========================\n");
-	// printf("DISJUNCTION\n");
-	// printf("==========================\n");
-	// if (ws->dual_func->num_terms == 0){
-	// 	printf("Only root node in the B&B Tree!\n");
-	// } else {
-	// 	for (int i = 0; i < ws->dual_func->num_terms; i++)
-	// 	{
-	// 		printDisjunction(ws->dual_func->disj[i]);
-	// 	}
-	// }
+	printf("==========================\n");
+	printf("DISJUNCTION\n");
+	printf("==========================\n");
+	if (ws->dual_func->num_terms == 0){
+		printf("Only root node in the B&B Tree!\n");
+	} else {
+		for (int i = 0; i < ws->dual_func->num_terms; i++)
+		{
+			printDisjunction(ws->dual_func->disj[i]);
+		}
+	}
 	
 
 	// printf("==========================\n");
@@ -4068,12 +4079,8 @@ int is_ray_new(ray_hash **hashtb, ray_hash *toAdd){
 #endif
 
 void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip, 
-				  branch_desc *bpath, disjunction_desc *new_disj, int* curr_term,
-				  disjunction_desc *prev_disj, int *prev_term,
-				  int *duals_lst, int duallen, 
-				  int* curr_ray, int *rays_index_row, int *rays_index_col, double *rays_val,
-				  int* curr_piece, int *duals_index_row, int *duals_index_col, double *duals_val,
-				  int *nnz_duals, int *nnz_rays){
+				  			 collect_duals_struct *cd)
+{
 	
 	if (node == NULL)
 	{
@@ -4127,12 +4134,12 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 		// Save branching info
 		if (bobj->type == BRANCHING_VARIABLE){
 			bobj = &(node->parent->bobj);
-			bpath[level - 1].type = bobj->type;
-			bpath[level - 1].name = bobj->name;
-			bpath[level - 1].sense = bobj->sense[j];
-			bpath[level - 1].rhs = bobj->rhs[j];
-			bpath[level - 1].range = bobj->range[j];
-			bpath[level - 1].branch = bobj->branch[j];
+			cd->bpath[level - 1].type = bobj->type;
+			cd->bpath[level - 1].name = bobj->name;
+			cd->bpath[level - 1].sense = bobj->sense[j];
+			cd->bpath[level - 1].rhs = bobj->rhs[j];
+			cd->bpath[level - 1].range = bobj->range[j];
+			cd->bpath[level - 1].branch = bobj->branch[j];
 		} else {
 			// BRANCHING_CUT
 			printf("Branching type not handled!\n");
@@ -4143,10 +4150,10 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 	// Check with the previous disjunction
 	// when we reach a node that was a previous leaf
 	if (ws->dual_func->disj){
-		if (((*prev_term) < ws->dual_func->num_terms) &&
-			(ws->dual_func->disj[*prev_term].node == node)){
-			prev_disj = &(ws->dual_func->disj[*prev_term]);
-			(*prev_term)++;
+		if ((cd->prev_term < ws->dual_func->num_terms) &&
+			(ws->dual_func->disj[cd->prev_term].node == node)){
+			cd->prev_disj = &(ws->dual_func->disj[cd->prev_term]);
+			(cd->prev_term)++;
 		} 
 	} 
 
@@ -4192,7 +4199,7 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 				}
 			}
 			dualhash->len = ws->m;
-			dualhash->row_idx = ws->dual_func->num_pieces + (*curr_piece);
+			dualhash->row_idx = ws->dual_func->num_pieces + (cd->curr_piece);
 
 			if ((dualhash && is_dual_new(&(ws->dual_func->dhashtb), dualhash))){
 				// successfully added, collect reduced costs
@@ -4233,26 +4240,33 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 				{
 					if (fabs(this_dual[i]) >= zerotol)
 					{
-						duals_index_row[*nnz_duals] = *curr_piece;
-						duals_index_col[*nnz_duals] = i;
-						duals_val[*nnz_duals] = this_dual[i];
-						(*nnz_duals)++;
+						cd->duals_pi_index_row[cd->nnz_pi_duals] = cd->curr_piece;
+						cd->duals_pi_index_col[cd->nnz_pi_duals] = i;
+						cd->duals_pi_val[cd->nnz_pi_duals] = this_dual[i];
+						(cd->nnz_pi_duals)++;
 					}
 				}
 				
 				for (i = 0; i < ws->n; i++)
 				{
-					if (fabs(this_djs[i]) >= zerotol)
+					if (this_djs[i] > zerotol)
 					{
-						duals_index_row[*nnz_duals] = *curr_piece;
-						duals_index_col[*nnz_duals] = ws->m + i;
-						duals_val[*nnz_duals] = this_djs[i];
-						(*nnz_duals)++;
+						cd->duals_dj_pos_index_row[cd->nnz_dj_pos_duals] = cd->curr_piece;
+						cd->duals_dj_pos_index_col[cd->nnz_dj_pos_duals] = i;
+						cd->duals_dj_pos_val[cd->nnz_dj_pos_duals] = this_djs[i];
+						(cd->nnz_dj_pos_duals)++;
+					}
+					else if (this_djs[i] < -zerotol)
+					{
+						cd->duals_dj_neg_index_row[cd->nnz_dj_neg_duals] = cd->curr_piece;
+						cd->duals_dj_neg_index_col[cd->nnz_dj_neg_duals] = i;
+						cd->duals_dj_neg_val[cd->nnz_dj_neg_duals] = this_djs[i];
+						(cd->nnz_dj_neg_duals)++;
 					}
 				}
 				// This is the actual row_idx in the matrix
 				idx_this_dual = dualhash->row_idx;
-				(*curr_piece)++;
+				(cd->curr_piece)++;
 
 				if (should_free_this_dual){
 					FREE(this_dual);
@@ -4269,7 +4283,7 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 			}
 			
 			if (child_num && idx_this_dual >= 0){
-				duals_lst[duallen++] = idx_this_dual;
+				cd->duals_lst[(cd->duallen)++] = idx_this_dual;
 			}
 		}
 	}
@@ -4294,20 +4308,20 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 			memcpy(lb, mip->lb, DSIZE * ws->n);
 			memcpy(ub, mip->ub, DSIZE * ws->n);
 			for (int i = 0; i < level; i++){
-				varidx = bpath[i].name;
-				switch (bpath[i].sense)
+				varidx = cd->bpath[i].name;
+				switch (cd->bpath[i].sense)
 				{
 				case 'E':
-					lb[varidx] = bpath[i].rhs;
-					ub[varidx] = bpath[i].rhs;
+					lb[varidx] = cd->bpath[i].rhs;
+					ub[varidx] = cd->bpath[i].rhs;
 					break;
 				case 'L':
-					// if (bpath[i].rhs < mip->ub[varidx])
-						ub[varidx] = bpath[i].rhs;
+					// if (cd->bpath[i].rhs < mip->ub[varidx])
+						ub[varidx] = cd->bpath[i].rhs;
 					break;
 				case 'G':
-					// if (bpath[i].rhs > mip->lb[varidx])
-						lb[varidx] = bpath[i].rhs;
+					// if (cd->bpath[i].rhs > mip->lb[varidx])
+						lb[varidx] = cd->bpath[i].rhs;
 					break;
 				case 'R':
 					printf("Warning: Ranged constraints not handled!\n");
@@ -4374,7 +4388,7 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 					rayhash->ray[i] = (long int)(node->rays[i] * 1e7);
 				}
 				rayhash->len = ws->m;
-				rayhash->row_idx = ws->dual_func->num_rays + (*curr_ray);
+				rayhash->row_idx = ws->dual_func->num_rays + (cd->curr_ray);
 					
 				// try to add this ray into the hashtable
 				if (is_ray_new(&(ws->dual_func->rhashtb), rayhash)){
@@ -4384,10 +4398,10 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 					{
 						if (fabs(node->rays[i]) >= zerotol)
 						{
-							rays_index_row[*nnz_rays] = *curr_ray;
-							rays_index_col[*nnz_rays] = i;
-							rays_val[*nnz_rays] = node->rays[i];
-							(*nnz_rays)++;
+							cd->rays_pi_index_row[cd->nnz_pi_rays] = cd->curr_ray;
+							cd->rays_pi_index_col[cd->nnz_pi_rays] = i;
+							cd->rays_pi_val[cd->nnz_pi_rays] = node->rays[i];
+							(cd->nnz_pi_rays)++;
 						}
 					}
 
@@ -4403,17 +4417,24 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 					
 					for (i = 0; i < ws->n; i++)
 					{
-						if (fabs(rayA[i]) >= zerotol)
+						if (rayA[i] > zerotol)
 						{
-							rays_index_row[*nnz_rays] = *curr_ray;
-							rays_index_col[*nnz_rays] = ws->m + i;
-							rays_val[*nnz_rays] = rayA[i];
-							(*nnz_rays)++;
+							cd->rays_dj_pos_index_row[cd->nnz_dj_pos_rays] = cd->curr_ray;
+							cd->rays_dj_pos_index_col[cd->nnz_dj_pos_rays] = i;
+							cd->rays_dj_pos_val[cd->nnz_dj_pos_rays] = rayA[i];
+							(cd->nnz_dj_pos_rays)++;
+						}
+						else if (rayA[i] < -zerotol)
+						{
+							cd->rays_dj_neg_index_row[cd->nnz_dj_neg_rays] = cd->curr_ray;
+							cd->rays_dj_neg_index_col[cd->nnz_dj_neg_rays] = i;
+							cd->rays_dj_neg_val[cd->nnz_dj_neg_rays] = rayA[i];
+							(cd->nnz_dj_neg_rays)++;
 						}
 					}
 					// This is the actual row_idx in the matrix
 					idx_this_ray = rayhash->row_idx;
-					(*curr_ray)++;
+					(cd->curr_ray)++;
 					
 					FREE(rayA);
 
@@ -4430,44 +4451,44 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 
 		// Duals
 #if 0
-		if (duallen){
-			disj.dual_idx = (int *)malloc(ISIZE * duallen);
-			memcpy(disj.dual_idx, duals_lst, ISIZE * duallen);
+		if (cd->duallen){
+			disj.dual_idx = (int *)malloc(ISIZE * cd->duallen);
+			memcpy(disj.dual_idx, cd->duals_lst, ISIZE * cd->duallen);
 			
 			// We must check for duplicates
-			qsort_i(disj.dual_idx, duallen);
+			qsort_i(disj.dual_idx, cd->duallen);
 			int num_uniques = 1;
-			for (i = 1; i < duallen; i++){
+			for (i = 1; i < cd->duallen; i++){
 				if( disj.dual_idx[i] != disj.dual_idx[num_uniques - 1]){
 					disj.dual_idx[num_uniques++] = disj.dual_idx[i];
 				}
 			}
-			if (num_uniques != duallen){
+			if (num_uniques != cd->duallen){
 				disj.dual_idx = (int *)realloc(disj.dual_idx, ISIZE * num_uniques);
 			}
 
-			disj.duallen = num_uniques;
+			disj.cd->duallen = num_uniques;
 		}
 #endif		
 		// Leaves
 		leaflen = is_new = (idx_this_dual >= 0);
-		if (prev_disj && prev_disj->leaflen) {
+		if (cd->prev_disj && cd->prev_disj->leaflen) {
 			if (is_new){
-				for (i = 0; i < prev_disj->leaflen; i++) {
-					if (prev_disj->leaf_idx[i] == idx_this_dual) {
+				for (i = 0; i < cd->prev_disj->leaflen; i++) {
+					if (cd->prev_disj->leaf_idx[i] == idx_this_dual) {
 						is_new = 0;
 						break;
 					}
 				}
 			}
-			leaflen = prev_disj->leaflen + is_new;
+			leaflen = cd->prev_disj->leaflen + is_new;
 		}
 
 		if (leaflen) {
 			disj.leaflen = leaflen;
 			disj.leaf_idx = (int *)malloc(ISIZE * leaflen);
-			if (prev_disj && prev_disj->leaflen) {
-				memcpy(disj.leaf_idx, prev_disj->leaf_idx, ISIZE * prev_disj->leaflen);
+			if (cd->prev_disj && cd->prev_disj->leaflen) {
+				memcpy(disj.leaf_idx, cd->prev_disj->leaf_idx, ISIZE * cd->prev_disj->leaflen);
 			}
 			if (idx_this_dual >= 0 && is_new) {
 				disj.leaf_idx[leaflen - 1] = idx_this_dual;
@@ -4477,32 +4498,32 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 		// Rays
 		raylen = is_new = (idx_this_ray >= 0);
 		
-		if (prev_disj && prev_disj->raylen) {
+		if (cd->prev_disj && cd->prev_disj->raylen) {
 			if (is_new){
-				for (i = 0; i < prev_disj->raylen; i++) {
-					if (prev_disj->ray_idx[i] == idx_this_ray) {
+				for (i = 0; i < cd->prev_disj->raylen; i++) {
+					if (cd->prev_disj->ray_idx[i] == idx_this_ray) {
 						is_new = 0;
 						break;
 					}
 				}
 			}
-			raylen = prev_disj->raylen + is_new;
+			raylen = cd->prev_disj->raylen + is_new;
 		}
 
 		if (raylen) {
 			disj.raylen = raylen;
 			disj.ray_idx = (int *)malloc(ISIZE * raylen);
-			if (prev_disj && prev_disj->raylen) {
-				memcpy(disj.ray_idx, prev_disj->ray_idx, ISIZE * prev_disj->raylen);
+			if (cd->prev_disj && cd->prev_disj->raylen) {
+				memcpy(disj.ray_idx, cd->prev_disj->ray_idx, ISIZE * cd->prev_disj->raylen);
 			}
 			if (idx_this_ray >= 0  && is_new) {
 				disj.ray_idx[raylen - 1] = idx_this_ray;
 			}
 		}
 		
-		new_disj[*curr_term] = disj;
+		cd->new_disj[cd->curr_term] = disj;
 
-		(*curr_term)++;
+		(cd->curr_term)++;
 
 #ifdef CHECK_DUAL_FUNC
 		// Let's do some checks
@@ -4515,7 +4536,7 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 		memcpy(lb, mip->lb, DSIZE * ws->n);
 		memcpy(ub, mip->ub, DSIZE * ws->n);
 
-		change_lbub_from_disj(lb, ub, ws->n, new_disj + ((*curr_term) - 1));
+		change_lbub_from_disj(lb, ub, ws->n, cd->new_disj + ((cd->curr_term) - 1));
 		
 		// Dual Obj Value of this node 
 		dualobj = 0;
@@ -4588,7 +4609,7 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 
 		count_leaf++;
 		
-		reset_lbub_from_disj(lb, ub, mip->lb, mip->ub, ws->n, new_disj + ((*curr_term) - 1));
+		reset_lbub_from_disj(lb, ub, mip->lb, mip->ub, ws->n, cd->new_disj + ((cd->curr_term) - 1));
 		if (node->feasibility_status == INFEASIBLE_PRUNED){
 			// There must be a ray checking its primal infeasibility
 			if (node->rays){
@@ -4628,12 +4649,7 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 	} else {
 		// if child_num > 0, then do recursion on child nodes
 		for (j = 0; j < child_num; j++)
-			collect_duals_from_tree(env, node->children[j], mip,  
-				  bpath, new_disj, curr_term, prev_disj, prev_term,
-				  duals_lst, duallen,
-				  curr_ray, rays_index_row, rays_index_col, rays_val,
-				  curr_piece, duals_index_row, duals_index_col, duals_val,
-				  nnz_duals, nnz_rays);
+			collect_duals_from_tree(env, node->children[j], mip, cd);
 	}
 }
 
@@ -4664,20 +4680,13 @@ int build_dual_func(sym_environment *env)
  	if (!ws->dual_func)
 	{
 		ws->dual_func = (dual_func_desc *)calloc(1, sizeof(dual_func_desc));
-		ws->dual_func->dhashtb = NULL;
-		ws->dual_func->duals  = NULL;
-		ws->dual_func->num_pieces = 0;
-		ws->dual_func->dualsPolicy = DUALS_SAVE_ALL;
-		// ws->dual_func->dualsPolicy = DUALS_LEAF_ONLY;
+		// ws->dual_func->dualsPolicy = DUALS_SAVE_ALL;
+		ws->dual_func->dualsPolicy = DUALS_LEAF_ONLY;
 		// ws->dual_func->raysPolicy = RAYS_SAVE_ALL;
-		// ws->dual_func->raysPolicy = RAYS_SAVE_FARKAS;
-		ws->dual_func->raysPolicy = RAYS_SAVE_DUALS;
+		ws->dual_func->raysPolicy = RAYS_SAVE_FARKAS;
+		// ws->dual_func->raysPolicy = RAYS_SAVE_DUALS;
+		ws->dual_func->evalPolicy = USE_DUALS_AND_RAYS_FROM_ONE_DISJ_TERM;
 		ws->dual_func->granularity = env->par.tm_par.granularity;
-		ws->dual_func->rhashtb = NULL;
-		ws->dual_func->rays = NULL;
-		ws->dual_func->num_rays = 0;
-		ws->dual_func->disj = NULL;
-		ws->dual_func->num_terms = 0;
 	}
 	
 	// ws->dual_func->num_terms = num_leaf;
@@ -4705,89 +4714,138 @@ int build_dual_func(sym_environment *env)
 	disjunction_desc *disj = (disjunction_desc*)malloc(sizeof(disjunction_desc) * num_leaf);
 
 	// Rays
-	int nnz_rays = 0;
-	int *rays_index_row = NULL;
-	int *rays_index_col = NULL;;
-	double *rays_val = NULL;
+	int *rays_pi_index_row = NULL;
+	int *rays_pi_index_col = NULL;;
+	double *rays_pi_val = NULL;
+	int *rays_dj_pos_index_row = NULL;
+	int *rays_dj_pos_index_col = NULL;;
+	double *rays_dj_pos_val = NULL;
+	int *rays_dj_neg_index_row = NULL;
+	int *rays_dj_neg_index_col = NULL;;
+	double *rays_dj_neg_val = NULL;
 
 	// Allocate memory for rays based on the policy
 	if ((ws->dual_func->raysPolicy == RAYS_SAVE_ALL) ||
 		(ws->dual_func->raysPolicy == RAYS_SAVE_FARKAS))
 	{
-		rays_index_row = (int *)malloc(ISIZE * num_rays * (ws->m + ws->n));
-		rays_index_col = (int *)malloc(ISIZE * num_rays * (ws->m + ws->n));
-		rays_val = (double *)malloc(DSIZE * num_rays * (ws->m + ws->n));
+		rays_pi_index_row = (int *)malloc(ISIZE * num_rays * (ws->m));
+		rays_pi_index_col = (int *)malloc(ISIZE * num_rays * (ws->m));
+		rays_pi_val = (double *)malloc(DSIZE * num_rays * (ws->m));
+
+		rays_dj_pos_index_row = (int *)malloc(ISIZE * num_rays * (ws->n));
+		rays_dj_pos_index_col = (int *)malloc(ISIZE * num_rays * (ws->n));
+		rays_dj_pos_val = (double *)malloc(DSIZE * num_rays * (ws->n));
+
+		rays_dj_neg_index_row = (int *)malloc(ISIZE * num_rays * (ws->n));
+		rays_dj_neg_index_col = (int *)malloc(ISIZE * num_rays * (ws->n));
+		rays_dj_neg_val = (double *)malloc(DSIZE * num_rays * (ws->n));
 	}
 
 	// Duals and reduced costs
-	int nnz_duals = 0;
-	int *duals_index_row = (int *)malloc(ISIZE * num_pieces * (ws->m + ws->n));
-	int *duals_index_col = (int *)malloc(ISIZE * num_pieces * (ws->m + ws->n));
-	double *duals_val = (double *)malloc(DSIZE * num_pieces * (ws->m + ws->n));
+	int *duals_pi_index_row = (int *)malloc(ISIZE * num_pieces * (ws->m));
+	int *duals_pi_index_col = (int *)malloc(ISIZE * num_pieces * (ws->m));
+	double *duals_pi_val = (double *)malloc(DSIZE * num_pieces * (ws->m));
+	int *duals_dj_pos_index_row = (int *)malloc(ISIZE * num_pieces * (ws->n));
+	int *duals_dj_pos_index_col = (int *)malloc(ISIZE * num_pieces * (ws->n));
+	double *duals_dj_pos_val = (double *)malloc(DSIZE * num_pieces * (ws->n));
+	int *duals_dj_neg_index_row = (int *)malloc(ISIZE * num_pieces * (ws->n));
+	int *duals_dj_neg_index_col = (int *)malloc(ISIZE * num_pieces * (ws->n));
+	double *duals_dj_neg_val = (double *)malloc(DSIZE * num_pieces * (ws->n));
 
 	// branching path
 	branch_desc *bpath = (branch_desc *)malloc(sizeof(branch_desc) * (ws->stat.max_depth));
-	// Duals path
-	int *duals_idx = (int *)malloc(ISIZE * (ws->stat.max_depth + 1));
+	// Idx of duals along the path from root to leaf
+	int *duals_lst = (int *)malloc(ISIZE * (ws->stat.max_depth + 1));
 
-	int prev_term = 0;  // idx of previous leaves (not needed here)
-	int curr_term = 0;  // current disjunction term
-	int curr_piece = 0; // current dual piece
-	int curr_ray = 0;   // current ray
-	int tot_piece = 0; // DEBUG: to check how sparse it is
+	collect_duals_struct *cd = (collect_duals_struct *)calloc(1, sizeof(collect_duals_struct));
+	cd->bpath = bpath;
+	cd->prev_disj = ws->dual_func->disj;
+	cd->new_disj = disj;
+	cd->duals_lst = duals_lst;
 
-	int curr_leaf = 0; // Debug: check the stati of leaves
+	cd->rays_pi_index_row = rays_pi_index_row;
+	cd->rays_pi_index_col = rays_pi_index_col;
+	cd->rays_pi_val = rays_pi_val;
 
-	collect_duals_from_tree(env, ws->rootnode, mip,  
-				  bpath, disj, &curr_term, NULL, &prev_term, 
-				  duals_idx, 0,
-				  &curr_ray, rays_index_row, rays_index_col, rays_val,
-				  &curr_piece, duals_index_row, duals_index_col, duals_val,
-				  &nnz_duals, &nnz_rays);
+	cd->rays_dj_pos_index_row = rays_dj_pos_index_row;
+	cd->rays_dj_pos_index_col = rays_dj_pos_index_col;
+	cd->rays_dj_pos_val = rays_dj_pos_val;
+
+	cd->rays_dj_neg_index_row = rays_dj_neg_index_row;
+	cd->rays_dj_neg_index_col = rays_dj_neg_index_col;
+	cd->rays_dj_neg_val = rays_dj_neg_val;
+
+	cd->duals_pi_index_row = duals_pi_index_row;
+	cd->duals_pi_index_col = duals_pi_index_col;
+	cd->duals_pi_val = duals_pi_val;
+
+	cd->duals_dj_pos_index_row = duals_dj_pos_index_row;
+	cd->duals_dj_pos_index_col = duals_dj_pos_index_col;
+	cd->duals_dj_pos_val = duals_dj_pos_val;
+
+	cd->duals_dj_neg_index_row = duals_dj_neg_index_row;
+	cd->duals_dj_neg_index_col = duals_dj_neg_index_col;
+	cd->duals_dj_neg_val = duals_dj_neg_val;
+
+	collect_duals_from_tree(env, ws->rootnode, mip, cd);
 
 	// Update the number of disjunction terms
 	// Delete the previous disjunction, there will be a new one
 	if (ws->dual_func->disj){
 		free_disjunction(ws->dual_func);
 	}
-	ws->dual_func->disj = disj;
-	ws->dual_func->num_terms = curr_term;
+	ws->dual_func->disj = cd->new_disj;
+	ws->dual_func->num_terms = cd->curr_term;
 #ifdef CHECK_DUAL_FUNC
-	if (num_leaf != curr_term){
+	if (num_leaf != cd->curr_term){
 		printf(" WARNING in build_dual_func():\n");
 		printf(" Not all leaves have been collected! num_leaf = %d, dual_func->num_terms %d\n", 
 		num_leaf, ws->dual_func->num_terms);
 	}
 #endif
 	// If at least one new dual have been found, construct the Dual Function
-	if (curr_piece > 0)
+	if (cd->curr_piece > 0)
 	{
-		CoinPackedMatrix *df = new CoinPackedMatrix(false, duals_index_row,
-									duals_index_col, duals_val, nnz_duals);
+		CoinPackedMatrix *df_pi = new CoinPackedMatrix(false, duals_pi_index_row,
+									duals_pi_index_col, duals_pi_val, cd->nnz_pi_duals);
+		
+		CoinPackedMatrix *df_dj_pos = new CoinPackedMatrix(false, duals_dj_pos_index_row,
+									duals_dj_pos_index_col, duals_dj_pos_val, cd->nnz_dj_pos_duals);
 
-		// Fix the number of columns to m + n
-		df->setDimensions(-1, ws->m + ws->n);
+		CoinPackedMatrix *df_dj_neg = new CoinPackedMatrix(false, duals_dj_neg_index_row,
+									duals_dj_neg_index_col, duals_dj_neg_val, cd->nnz_dj_neg_duals);
 
-		if (!ws->dual_func->duals)
+		// Fix the dimensions
+		df_pi->setDimensions(-1, ws->m);
+		df_dj_pos->setDimensions(cd->curr_piece, ws->n);
+		df_dj_neg->setDimensions(cd->curr_piece, ws->n);
+
+		if (!ws->dual_func->duals_pi)
 		{
 			// New Dual Function
-			ws->dual_func->duals = df;
+			ws->dual_func->duals_pi = df_pi;
+			ws->dual_func->duals_dj_pos = df_dj_pos;
+			ws->dual_func->duals_dj_neg = df_dj_neg;
 		}
 		else
 		{
 			// Already existing Dual Function
 			// We append to the previous, duplicates have been already checked
-			ws->dual_func->duals->bottomAppendPackedMatrix(*df);
-			delete df;
+			ws->dual_func->duals_pi->bottomAppendPackedMatrix(*df_pi);
+			ws->dual_func->duals_dj_pos->bottomAppendPackedMatrix(*df_dj_pos);
+			ws->dual_func->duals_dj_neg->bottomAppendPackedMatrix(*df_dj_neg);
+			delete df_pi;
+			delete df_dj_pos;
+			delete df_dj_neg;
 		}
 
-		// There should be a limit on the number of dual solutions we can collect
-		ws->dual_func->num_pieces += curr_piece;
+		// FIXME: There should be a limit on the number of dual solutions we can collect
+		ws->dual_func->num_pieces += cd->curr_piece;
 #ifdef CHECK_DUAL_FUNC
-		if (ws->dual_func->num_pieces !=  ws->dual_func->duals->getMajorDim()){
+		if (ws->dual_func->num_pieces !=  ws->dual_func->duals_pi->getMajorDim()){
 			printf(" WARNING in build_dual_func():\n");
 			printf(" Some pieces are lost in CoinPackedMatrix! dual_func->num_pieces = %d, duals->getMajorDim() = %d\n", 
-			ws->dual_func->num_pieces, ws->dual_func->duals->getMajorDim());
+			ws->dual_func->num_pieces, ws->dual_func->duals_pi->getMajorDim());
 		}	
 		int len_ht = 0;
 		dual_hash *s;
@@ -4803,32 +4861,45 @@ int build_dual_func(sym_environment *env)
 #endif
 	}
 
-	if (curr_ray > 0){
-		CoinPackedMatrix *rays = new CoinPackedMatrix(false, rays_index_row,
-									rays_index_col, rays_val, nnz_rays);
+	if (cd->curr_ray > 0){
+		CoinPackedMatrix *rays_pi = new CoinPackedMatrix(false, rays_pi_index_row,
+									rays_pi_index_col, rays_pi_val, cd->nnz_pi_rays);
+		CoinPackedMatrix *rays_dj_pos = new CoinPackedMatrix(false, rays_dj_pos_index_row,
+									rays_dj_pos_index_col, rays_dj_pos_val, cd->nnz_dj_pos_rays);
+		CoinPackedMatrix *rays_dj_neg = new CoinPackedMatrix(false, rays_dj_neg_index_row,
+									rays_dj_neg_index_col, rays_dj_neg_val, cd->nnz_dj_neg_rays);
+		
 
-		// Fix the number of columns to m + n
-		rays->setDimensions(-1, ws->m + ws->n);
+		// Fix the dimensions
+		rays_pi->setDimensions(-1, ws->m);
+		rays_dj_pos->setDimensions(cd->curr_ray, ws->n);
+		rays_dj_neg->setDimensions(cd->curr_ray, ws->n);
 
-		if (!ws->dual_func->rays)
+		if (!ws->dual_func->rays_pi)
 		{
 			// New Dual Function
-			ws->dual_func->rays = rays;
+			ws->dual_func->rays_pi = rays_pi;
+			ws->dual_func->rays_dj_pos = rays_dj_pos;
+			ws->dual_func->rays_dj_neg = rays_dj_neg;
 		}
 		else
 		{
 			// Already existing Dual Function
 			// We append to the previous, duplicates have been already checked
-			ws->dual_func->rays->bottomAppendPackedMatrix(*rays);
-			delete rays;
+			ws->dual_func->rays_pi->bottomAppendPackedMatrix(*rays_pi);
+			ws->dual_func->rays_dj_pos->bottomAppendPackedMatrix(*rays_dj_pos);
+			ws->dual_func->rays_dj_neg->bottomAppendPackedMatrix(*rays_dj_neg);
+			delete rays_pi;
+			delete rays_dj_pos;
+			delete rays_dj_neg;
 		}
 
-		ws->dual_func->num_rays += curr_ray;
+		ws->dual_func->num_rays += cd->curr_ray;
 #ifdef CHECK_DUAL_FUNC
-		if (ws->dual_func->num_rays !=  ws->dual_func->rays->getMajorDim()){
+		if (ws->dual_func->num_rays !=  ws->dual_func->rays_pi->getMajorDim()){
 			printf(" WARNING in build_dual_func():\n");
 			printf(" Some rays are lost in CoinPackedMatrix! dual_func->num_rays = %d, rays->getMajorDim() = %d\n", 
-			ws->dual_func->num_rays, ws->dual_func->rays->getMajorDim());
+			ws->dual_func->num_rays, ws->dual_func->rays_pi->getMajorDim());
 		}	
 		int len_ht = 0;
 		ray_hash *s;
@@ -4848,14 +4919,26 @@ int build_dual_func(sym_environment *env)
 	printf("Num unique non optimal Dual solutions: %d\n", count_over_ub);
 #endif
 	FREE(bpath);
-	FREE(duals_idx);
-	FREE(duals_index_row);
-	FREE(duals_index_col);
-	FREE(duals_val);
-	FREE(rays_index_row);
-	FREE(rays_index_col);
-	FREE(rays_val);
-
+	FREE(duals_lst);
+	FREE(duals_pi_index_row);
+	FREE(duals_pi_index_col);
+	FREE(duals_pi_val);
+	FREE(duals_dj_pos_index_row);
+	FREE(duals_dj_pos_index_col);
+	FREE(duals_dj_pos_val);
+	FREE(duals_dj_neg_index_row);
+	FREE(duals_dj_neg_index_col);
+	FREE(duals_dj_neg_val);
+	FREE(rays_pi_index_row);
+	FREE(rays_pi_index_col);
+	FREE(rays_pi_val);
+	FREE(rays_dj_pos_index_row);
+	FREE(rays_dj_pos_index_col);
+	FREE(rays_dj_pos_val);
+	FREE(rays_dj_neg_index_row);
+	FREE(rays_dj_neg_index_col);
+	FREE(rays_dj_neg_val);
+	FREE(cd);
 	
 	return (FUNCTION_TERMINATED_NORMALLY);
 #else
@@ -4889,135 +4972,66 @@ int evaluate_dual_function(warm_start_desc *ws, MIPdesc *mip,
 		return (FUNCTION_TERMINATED_NORMALLY);
 	}
 
-#ifdef DEBUG_DUAL_FUNC
-	// For sanity check
-	double sanity_objVal = 0;
-	OsiXSolverInterface *si;
-	if (!ws->dual_func->si){
-		ws->dual_func->si = new OsiXSolverInterface();
-		ws->dual_func->si->setupForRepeatedUse();
-		ws->dual_func->si->setHintParam(OsiDoReducePrint);
-		ws->dual_func->si->messageHandler()->setLogLevel(0);
-		ws->dual_func->si->setCleanupScaling(1);
-	} 
-	si = ws->dual_func->si;
-#endif
-
+	int i = 0, j = 0, t = 0, r = 0, k = 0;
 	clock_t start, end;
 	double cpu_time_used;
 	ws->dual_func->rays_cpu_time = 0;
 	ws->dual_func->duals_cpu_time = 0;
-
-	// Build the new rhs to be of the correct size, ws->m
-	double *rhs = (double *)malloc(ws->m * sizeof(double));
-
-	memcpy(rhs, new_rhs, CoinMin(size_new_rhs, ws->m) * sizeof(double));
-	if (size_new_rhs < ws->m){
-		for (int i = size_new_rhs; i < ws->m; i++){
-			rhs[i] = mip->rhs[i];
-		}
-	}
-
-	int i, u, l, t, idx, curr_is_infty;
-	double val;
-	CoinPackedMatrix *duals = ws->dual_func->duals;
-	CoinPackedMatrix *rays = ws->dual_func->rays;
-	disjunction_desc *disj;
-	CoinBigIndex first = 0, last = 0, j = 0;
 
 	double zerotol = 1e-7;
 	double granularity = ws->dual_func->granularity;
 	double factor = 0;
 	double global_best_bound = SYM_INFINITY;
 	double local_best_bound;
-	double *rhs_times_ray = NULL;
-	int *rayA_start = NULL;
-	double farkasProof = 0;
-	int    is_ray_infty = 0;
-	int *feas_terms = NULL;
+
+	double *lb = (double *)malloc(ws->n * DSIZE);
+	double *ub = (double *)malloc(ws->n * DSIZE); 
+	memcpy(lb, mip->lb, DSIZE * ws->n);
+	memcpy(ub, mip->ub, DSIZE * ws->n);
+	disjunction_desc *disj;
+
+	int *feas_terms = (int *)malloc(ws->dual_func->num_terms * ISIZE);
 	int is_term_feas = TRUE;
 	int num_feas_terms = 0;
+	int this_term_num_items = 0;
+
+	CoinBigIndex first = 0, last = 0;
+	const double* elem, *elem_pos, *elem_neg;
+    const int* indices, *indices_pos, *indices_neg;
+	CoinPackedMatrix *duals_pi = ws->dual_func->duals_pi;
+	CoinPackedMatrix *duals_dj_pos = ws->dual_func->duals_dj_pos;
+	CoinPackedMatrix *duals_dj_neg = ws->dual_func->duals_dj_neg;
+	CoinPackedMatrix *rays_pi = ws->dual_func->rays_pi;
+	CoinPackedMatrix *rays_dj_pos = ws->dual_func->rays_dj_pos;
+	CoinPackedMatrix *rays_dj_neg = ws->dual_func->rays_dj_neg;
+
+	double *rays_pi_times_b = (double *)calloc(ws->dual_func->num_rays, DSIZE);
+	double *duals_pi_times_b = (double *)calloc(ws->dual_func->num_pieces, DSIZE);
+
+	double farkas_proof = 0;
+	int this_item_idx = 0;
+
 	double dual_obj = 0;
-	double is_infty = 0;
+
 #ifdef CHECK_DUAL_FUNC
 	int idx_loc_dual = -1;
 	int idx_opt_dual = -1;
 	int idx_opt_term = -1;
 #endif
-	// Allocate space for rhs * pi (i.e. dual solution)
-	// double *rhs_times_pi = (double *)calloc(ws->dual_func->num_pieces, DSIZE);
-	double *rhs_times_pi_plus_dj = (double *)calloc(ws->dual_func->num_pieces, DSIZE);
-	double *is_dual_obj_infty = (double *)calloc(ws->dual_func->num_pieces, DSIZE);
 
-	int *dj_start = (int *)malloc(ws->dual_func->num_pieces * ISIZE);
-	double *lb = (double *)malloc(ws->n * sizeof(double));
-	double *ub = (double *)malloc(ws->n * sizeof(double)); 
+	// Build the new rhs to be of the correct size, ws->m
+	double *rhs = (double *)malloc(ws->m * DSIZE);
 
-	// Root lb/ub
-	memcpy(lb, mip->lb, DSIZE * ws->n);
-	memcpy(ub, mip->ub, DSIZE * ws->n);
-
-	const double* elem = duals->getElements();
-    const int* indices = duals->getIndices();
-
-	start = clock();
-	// Start by computing rhs * pi 
-	for (i = 0; i < ws->dual_func->num_pieces; i++){
-		first = duals->getVectorFirst(i);
-		last = duals->getVectorLast(i);
-		for (j = first; j < last && indices[j] < ws->m; ++j){
-			rhs_times_pi_plus_dj[i] += elem[j] * rhs[indices[j]];
-		}
-		// the last value of j is where the djs starts for the curr dual piece
-		if (j < last){
-			dj_start[i] = j;	
-		} else {
-			// this should only happen when all djs are zero
-			dj_start[i] = last;
-		}
-		
-		// Add reduced costs from the root lb/ub
-		for (j = dj_start[i]; j < last; j++)
-		{
-			idx = indices[j] - ws->m;
-			val = elem[j];
-			if (val > zerotol) // dj > 0 ?
-			{
-				if (lb[idx] > -SYM_INFINITY){
-					rhs_times_pi_plus_dj[i] += val * lb[idx];
-				} else {
-					is_dual_obj_infty[i] -= val;
-				}
-			}
-			else if (val < -zerotol) // dj < 0 ?
-			{
-				if (ub[idx] < SYM_INFINITY){
-					rhs_times_pi_plus_dj[i] += val * ub[idx];
-				} else {
-					is_dual_obj_infty[i] -= val;	
-				}
-			}
+	memcpy(rhs, new_rhs, CoinMin(size_new_rhs, ws->m) * DSIZE);
+	if (size_new_rhs < ws->m){
+		for (i = size_new_rhs; i < ws->m; ++i){
+			rhs[i] = mip->rhs[i];
 		}
 	}
-	end = clock();
-	cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
-	ws->dual_func->duals_cpu_time += cpu_time_used;
-	// printf("%.10f\n", ws->dual_func->duals_cpu_time);
 
-	// if (ws->dual_func->num_terms == 0){
-	// 	// The current b&b tree consists just of the root node
-	// 	local_best_bound = -SYM_INFINITY;
-	// 	// Now take the maximum
-	// 	for (i = 0; i < ws->dual_func->num_pieces; i++){
-	// 		if ((fabs(is_dual_obj_infty[i]) < zerotol) && 
-	// 		    (rhs_times_pi_plus_dj[i] > local_best_bound)){
-	// 			local_best_bound = rhs_times_pi_plus_dj[i];
-	// 		}
-	// 	}
-		
-	// 	global_best_bound = local_best_bound;
-	// 	goto TERM_EVAL_DUAL_FUNC;
-	// }
+	/**************************************************************\
+	 * 	Dual Rays
+	\**************************************************************/
 
 	/* =========== feb223 ============================================
 	// Use the dual rays in the Dual Function description to check
@@ -5035,69 +5049,76 @@ int evaluate_dual_function(warm_start_desc *ws, MIPdesc *mip,
 	// z[j]  =	l[j], if rA[j] > 0,
 	// 	     =	u[j], if rA[j] < 0 
 	// yield the minimum violation.
-	// 
-	// CLP returns by default (r, -rA) but r is for the scaled 
-	// LP it is internally solving and it may not prove infeasibility
-	// for the unscaled problem. This has already taken care
-	// of in get_dual_ray().
 	// ============================================================== */
+
 	start = clock();
-	feas_terms = (int *)malloc(ws->dual_func->num_terms * ISIZE);
-	
-	if (ws->dual_func->num_rays > 0){
+	if (ws->dual_func->num_rays > 0)
+	{
+		elem    = rays_pi->getElements();
+		indices = rays_pi->getIndices();
 
-		// Allocate space for rhs * ray 
-		rhs_times_ray = (double *)calloc(ws->dual_func->num_rays, DSIZE);
-		rayA_start = (int *)malloc(ws->dual_func->num_rays * ISIZE);
+		elem_pos = rays_dj_pos->getElements();
+		indices_pos = rays_dj_pos->getIndices();
 
-		const double* elem_r = rays->getElements();
-    	const int* indices_r = rays->getIndices();
+		elem_neg = rays_dj_neg->getElements();
+		indices_neg = rays_dj_neg->getIndices();
 
 		// Start by computing rhs * ray
 		for (i = 0; i < ws->dual_func->num_rays; i++){
-			first = rays->getVectorFirst(i);
-			last = rays->getVectorLast(i);
-			for (j = first; j < last && indices_r[j] < ws->m; ++j){
-				rhs_times_ray[i] -= elem_r[j] * rhs[indices_r[j]];
-			}
-			// the last value of j is where the rayA starts for the curr ray
-			if (j < last){
-				rayA_start[i] = j;	
-			} else {
-				// this should only happen when all rayA are zero
-				rayA_start[i] = last;
+			first = rays_pi->getVectorFirst(i);
+			last  = rays_pi->getVectorLast(i);
+			for (j = first; j < last; ++j){
+				rays_pi_times_b[i] -= elem[j] * rhs[indices[j]];
 			}
 		}
 
-		for (t = 0; t < ws->dual_func->num_terms; t++){
-
+		for (t = 0; t < ws->dual_func->num_terms; t++)
+		{
 			disj = ws->dual_func->disj + t;
 			// Install lb/ub
 			change_lbub_from_disj(lb, ub, ws->n, disj);
 
 			is_term_feas = TRUE;
 
-			for (int r = 0; (r < ws->dual_func->num_rays) && (is_term_feas); r++){
-				
-				farkasProof = rhs_times_ray[r];
-				last = rays->getVectorLast(r);
+			switch (ws->dual_func->evalPolicy)
+			{
+			case USE_DUALS_AND_RAYS_FROM_ALL_DISJ_TERM:
+				this_term_num_items = ws->dual_func->num_rays;
+				break;
+			case USE_DUALS_AND_RAYS_FROM_ONE_DISJ_TERM:
+			default:
+				this_term_num_items = disj->raylen;
+				break;
+			}
 
-				for (int i = rayA_start[r]; i < last; i++){
-					if (elem_r[i] > zerotol){
-						farkasProof += elem_r[i] * lb[indices_r[i] - ws->m];
-					} 
-					else if (elem_r[i] < -zerotol){
-						farkasProof += elem_r[i] * ub[indices_r[i] - ws->m];
-					}
+			for (r = 0; (r < this_term_num_items) && (is_term_feas); ++r){
+				
+				if (ws->dual_func->evalPolicy == USE_DUALS_AND_RAYS_FROM_ONE_DISJ_TERM)
+					this_item_idx = disj->ray_idx[r];
+				else 
+					this_item_idx = r;
+
+				farkas_proof = rays_pi_times_b[this_item_idx];
+				first = rays_dj_pos->getVectorFirst(this_item_idx);
+				last = rays_dj_pos->getVectorLast(this_item_idx);
+				for (j = first; j < last; j++){
+					farkas_proof += elem_pos[j] * lb[indices_pos[j]];
 				}
 
-				if (farkasProof > 1e-5){
+				first = rays_dj_neg->getVectorFirst(this_item_idx);
+				last = rays_dj_neg->getVectorLast(this_item_idx);
+				for (j = first; j < last; j++){
+					farkas_proof += elem_neg[j] * ub[indices_neg[j]];
+				}
+
+				if (farkas_proof > 1e-5){
 					// This term of the disjunction is infeasible for this rhs
 					// and should not be considered
 					is_term_feas = FALSE;
 				}
+				
 			}
-			
+
 			if (is_term_feas){
 				feas_terms[num_feas_terms++] = t;
 			}
@@ -5109,165 +5130,86 @@ int evaluate_dual_function(warm_start_desc *ws, MIPdesc *mip,
 		// No rays, all terms are feasible
 		num_feas_terms = ws->dual_func->num_terms;
 	}
-
 	end = clock();
 	cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
 	ws->dual_func->rays_cpu_time += cpu_time_used;
 
-#ifdef DEBUG_DUAL_FUNC
-	// This is a sanity check if the rays prove primal infeasibility
-	if (ws->dual_func->num_rays > 0){
-		clock_t start, end;
-		double cpu_time_used;
-		start = clock();
-		for (int t = 0; t < ws->dual_func->num_terms; t++){
-
-			disj = ws->dual_func->disj + t;
-			change_lbub_from_disj(lb, ub, ws->n, disj);
-		
-			si->loadProblem(ws->n, ws->m,
-								mip->matbeg, mip->matind,
-								mip->matval, lb,
-								ub, mip->obj,
-								mip->sense, rhs,
-								mip->rngval);
-			
-			si->initialSolve();
-
-			if (si->isProvenPrimalInfeasible()){
-				int found = 0;
-				for (int i = 0; i < num_feas_terms; i++){
-					if (feas_terms[i] == t){
-						found = 1;
-						break;
-					}
-				}
-				if (found){
-					// This case could happen when the leaf is OVER_UB_PRUNED
-					// and CLP stopped before proving dual unboundedness. 
-					// This is OK, as long as we have the appropriate dual solution
-				}
-			} else if (si->isProvenOptimal()){
-				int found = 0;
-				for (int i = 0; i < num_feas_terms; i++){
-					if (feas_terms[i] == t){
-						found = 1;
-						break;
-					}
-				}
-				if (!found){
-					printf("Warning: FarkasProof not working!\n");
-					// If this happens, it is problematic!!
-					// Farkas Proof is giving a false positive
-				}
-			}
-
-			reset_lbub_from_disj(lb, ub, mip->lb, mip->ub, ws->n, disj);
-		}
-		end = clock();
-		cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
-		ws->dual_func->lp_cpu_time += cpu_time_used;
+	if (num_feas_terms == 0)
+	{
+		goto TERM_EVAL_DUAL_FUNC;
 	}
-#endif
-	
+
+	/**************************************************************\
+	 * 	Dual Solutions
+	\**************************************************************/
+	elem    = duals_pi->getElements();
+	indices = duals_pi->getIndices();
+
+	elem_pos = duals_dj_pos->getElements();
+	indices_pos = duals_dj_pos->getIndices();
+
+	elem_neg = duals_dj_neg->getElements();
+	indices_neg = duals_dj_neg->getIndices();
+
 	start = clock();
-// #pragma omp parallel for shared(global_best_bound)
-	// Now adjust the lb/ub * dj from the disjunction terms
-	for (int k = 0; k < num_feas_terms; k++){
+	// Start by computing b * pi
+	for (i = 0; i < ws->dual_func->num_pieces; i++){
+		first = duals_pi->getVectorFirst(i);
+		last  = duals_pi->getVectorLast(i);
+		for (j = first; j < last ; ++j){
+			duals_pi_times_b[i] += elem[j] * rhs[indices[j]];
+		}
+	}
+
+	for (k = 0; k < num_feas_terms; k++){
 
 		t = (num_feas_terms == ws->dual_func->num_terms ? k : feas_terms[k]);
-
 		disj = ws->dual_func->disj + t;
-		int lblen = disj->lblen;
-		int *lbvaridx = disj->lbvaridx;
-		double *disj_lb = disj->lb;
 
-		int ublen = disj->ublen;
-		int *ubvaridx = disj->ubvaridx;
-		double *disj_ub = disj->ub;
+		// Install lb/ub
+		change_lbub_from_disj(lb, ub, ws->n, disj);
 
 		local_best_bound = -SYM_INFINITY;
 
-		// change_lbub_from_disj(lb, ub, ws->n, disj);
-
-#ifdef DEBUG_DUAL_FUNC
-		clock_t start, end;
-		double cpu_time_used;
-		start = clock();
-		si->loadProblem(ws->n, ws->m,
-							mip->matbeg, mip->matind,
-							mip->matval, lb,
-							ub, mip->obj,
-							mip->sense, rhs,
-							mip->rngval);
-		
-		si->initialSolve();
-		if (si->isProvenOptimal()){
-			sanity_objVal = si->getObjValue();
-		} else {
-			// Should never happen!
-			sanity_objVal = SYM_INFINITY;
+		switch (ws->dual_func->evalPolicy)
+		{
+		case USE_DUALS_AND_RAYS_FROM_ALL_DISJ_TERM:
+			this_term_num_items = ws->dual_func->num_pieces;
+			break;
+		case USE_DUALS_AND_RAYS_FROM_ONE_DISJ_TERM:
+		default:
+			this_term_num_items = disj->leaflen;
+			break;
 		}
-		end = clock();
-		cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
-		ws->dual_func->lp_cpu_time += cpu_time_used;
-#endif
-		for (int i = 0; i < ws->dual_func->num_pieces; i++){
 
-			dual_obj = rhs_times_pi_plus_dj[i];
-			is_infty = is_dual_obj_infty[i];
-			j = dj_start[i];
-			last = duals->getVectorLast(i);
-			l = 0, u = 0;
-			for (j = dj_start[i]; j < last; j++)
-			{
-				idx = indices[j] - ws->m;
-				val = elem[j];
-				if (val > zerotol) {
-					while (l < lblen && lbvaridx[l] < idx) l++;
-					if (l < lblen && lbvaridx[l] == idx){
-					// 	dual_obj += val * (disj_lb[l] - lb[idx]);
-						if (lb[idx] > -SYM_INFINITY) {
-							dual_obj += val * (disj_lb[l] - lb[idx]);
-						} else {
-							dual_obj += val * disj_lb[l];
-							is_infty += val;
-						}
-					}
-				} else if (val < zerotol) {
-					while (u < ublen && ubvaridx[u] < idx) u++;
-					if (u < ublen && ubvaridx[u] == idx){
-						// dual_obj += val * (disj_ub[u] - ub[idx]);
-						if (ub[idx] < SYM_INFINITY){
-							dual_obj += val * (disj_ub[u] - ub[idx]);
-						} else {
-							dual_obj += val * (disj_ub[u]);
-							is_infty += val;	
-						}
-					}
-				}
+		for (r = 0; r < this_term_num_items; ++r){
+			if (ws->dual_func->evalPolicy == USE_DUALS_AND_RAYS_FROM_ONE_DISJ_TERM)
+				this_item_idx = disj->leaf_idx[r];
+			else 
+				this_item_idx = r;
+
+			dual_obj = duals_pi_times_b[this_item_idx];
+			first = duals_dj_pos->getVectorFirst(this_item_idx);
+			last = duals_dj_pos->getVectorLast(this_item_idx);
+			for (j = first; j < last; j++){
+				dual_obj += elem_pos[j] * lb[indices_pos[j]];
 			}
-			
-			if ((fabs(is_infty) < zerotol) &&
-				(dual_obj > local_best_bound)){
+
+			first = duals_dj_neg->getVectorFirst(this_item_idx);
+			last = duals_dj_neg->getVectorLast(this_item_idx);
+			for (j = first; j < last; j++){
+				dual_obj += elem_neg[j] * ub[indices_neg[j]];
+			}
+
+			if (dual_obj > local_best_bound){
 #ifdef CHECK_DUAL_FUNC
-				idx_loc_dual = i;
+				idx_loc_dual = this_item_idx;
 #endif
 				local_best_bound = dual_obj;
 			} 
 		}
 
-#ifdef DEBUG_DUAL_FUNC
-		// Equality with sanity_objVal may not hold since
-		// CLP might have stopped the solution of LPs prematurely 
-		// due to the curr UB in the Tree but this is not a problem
-		// as long as the dual solution we have is enough to be "pruned by bound".
-		// Hence we check that local_best_bound 
-		// is a valid dual bound to sanity_objVal
-		// assert((local_best_bound - sanity_objVal) < 0.001);
-#endif	
-
-#ifdef CHECK_DUAL_FUNC
+		#ifdef CHECK_DUAL_FUNC
 		printf("Disj: %d, Best dual solution: %d\n", t, idx_loc_dual);
 #endif
 		if (fabs(local_best_bound - global_best_bound) > zerotol && // Not equals
@@ -5279,10 +5221,9 @@ int evaluate_dual_function(warm_start_desc *ws, MIPdesc *mip,
 			global_best_bound = local_best_bound;
 		}
 
-		// reset_lbub_from_disj(lb, ub, mip->lb, mip->ub, ws->n, disj);
+		// Reset lb/ub
+		reset_lbub_from_disj(lb, ub, mip->lb, mip->ub, ws->n, disj);
 	}
-	
-TERM_EVAL_DUAL_FUNC:
 
 	end = clock();
 	cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
@@ -5300,21 +5241,18 @@ TERM_EVAL_DUAL_FUNC:
 #ifdef CHECK_DUAL_FUNC
 	printf("Best disj: %d, Best dual solution %d\n", idx_opt_term, idx_opt_dual);
 #endif	
+
+TERM_EVAL_DUAL_FUNC:
 	*dual_bound = global_best_bound;
 
-	FREE(rhs_times_pi_plus_dj);
-	FREE(is_dual_obj_infty);
-	FREE(dj_start);
 	FREE(lb);
 	FREE(ub);
-	FREE(rhs);
 	FREE(feas_terms);
-	if (ws->dual_func->num_rays > 0){	
-		FREE(rhs_times_ray);
-		FREE(rayA_start);
-	}
+	FREE(rays_pi_times_b);
+	FREE(duals_pi_times_b);
+	FREE(rhs);
 
-	return (FUNCTION_TERMINATED_NORMALLY);
+	
 #else
 	printf("evaluate_dual_func():\n");
 	printf("Sensitivity analysis features are not enabled.\n");
@@ -5322,5 +5260,463 @@ TERM_EVAL_DUAL_FUNC:
 	return (FUNCTION_TERMINATED_ABNORMALLY);
 
 #endif
+
 }
+
+
+// int evaluate_dual_function(warm_start_desc *ws, MIPdesc *mip, 
+// 						double *new_rhs, int size_new_rhs, 
+// 						double *dual_bound){
+// #ifdef SENSITIVITY_ANALYSIS
+// 	if (!ws)
+// 	{
+// 		printf("Warning: NULL pointer in evaluate_dual_func()\n");
+// 		return (FUNCTION_TERMINATED_ABNORMALLY);
+// 	}
+
+// 	if (!ws->dual_func)
+// 	{
+// 		printf("Warning: None or empty dual function in evaluate_dual_func()\n");
+// 		return (FUNCTION_TERMINATED_ABNORMALLY);
+// 	}
+
+// 	if (ws->dual_func->num_pieces == 0){
+// 		*dual_bound = -SYM_INFINITY;
+// 		return (FUNCTION_TERMINATED_NORMALLY);
+// 	}
+
+// #ifdef DEBUG_DUAL_FUNC
+// 	// For sanity check
+// 	double sanity_objVal = 0;
+// 	OsiXSolverInterface *si;
+// 	if (!ws->dual_func->si){
+// 		ws->dual_func->si = new OsiXSolverInterface();
+// 		ws->dual_func->si->setupForRepeatedUse();
+// 		ws->dual_func->si->setHintParam(OsiDoReducePrint);
+// 		ws->dual_func->si->messageHandler()->setLogLevel(0);
+// 		ws->dual_func->si->setCleanupScaling(1);
+// 	} 
+// 	si = ws->dual_func->si;
+// #endif
+
+// 	clock_t start, end;
+// 	double cpu_time_used;
+// 	ws->dual_func->rays_cpu_time = 0;
+// 	ws->dual_func->duals_cpu_time = 0;
+
+// 	// Build the new rhs to be of the correct size, ws->m
+// 	double *rhs = (double *)malloc(ws->m * sizeof(double));
+
+// 	memcpy(rhs, new_rhs, CoinMin(size_new_rhs, ws->m) * sizeof(double));
+// 	if (size_new_rhs < ws->m){
+// 		for (int i = size_new_rhs; i < ws->m; i++){
+// 			rhs[i] = mip->rhs[i];
+// 		}
+// 	}
+
+// 	int i, u, l, t, idx, curr_is_infty;
+// 	double val;
+// 	CoinPackedMatrix *duals = ws->dual_func->duals;
+// 	CoinPackedMatrix *rays = ws->dual_func->rays;
+// 	disjunction_desc *disj;
+// 	CoinBigIndex first = 0, last = 0, j = 0;
+
+// 	double zerotol = 1e-7;
+// 	double granularity = ws->dual_func->granularity;
+// 	double factor = 0;
+// 	double global_best_bound = SYM_INFINITY;
+// 	double local_best_bound;
+// 	double *rhs_times_ray = NULL;
+// 	int *rayA_start = NULL;
+// 	double farkasProof = 0;
+// 	int    is_ray_infty = 0;
+// 	int *feas_terms = NULL;
+// 	int is_term_feas = TRUE;
+// 	int num_feas_terms = 0;
+// 	double dual_obj = 0;
+// 	double is_infty = 0;
+// #ifdef CHECK_DUAL_FUNC
+// 	int idx_loc_dual = -1;
+// 	int idx_opt_dual = -1;
+// 	int idx_opt_term = -1;
+// #endif
+// 	// Allocate space for rhs * pi (i.e. dual solution)
+// 	// double *rhs_times_pi = (double *)calloc(ws->dual_func->num_pieces, DSIZE);
+// 	double *rhs_times_pi_plus_dj = (double *)calloc(ws->dual_func->num_pieces, DSIZE);
+// 	double *is_dual_obj_infty = (double *)calloc(ws->dual_func->num_pieces, DSIZE);
+
+// 	int *dj_start = (int *)malloc(ws->dual_func->num_pieces * ISIZE);
+// 	double *lb = (double *)malloc(ws->n * sizeof(double));
+// 	double *ub = (double *)malloc(ws->n * sizeof(double)); 
+
+// 	// Root lb/ub
+// 	memcpy(lb, mip->lb, DSIZE * ws->n);
+// 	memcpy(ub, mip->ub, DSIZE * ws->n);
+
+// 	const double* elem = duals->getElements();
+//     const int* indices = duals->getIndices();
+
+// 	start = clock();
+// 	// Start by computing rhs * pi 
+// 	for (i = 0; i < ws->dual_func->num_pieces; i++){
+// 		first = duals->getVectorFirst(i);
+// 		last = duals->getVectorLast(i);
+// 		for (j = first; j < last && indices[j] < ws->m; ++j){
+// 			rhs_times_pi_plus_dj[i] += elem[j] * rhs[indices[j]];
+// 		}
+// 		// the last value of j is where the djs starts for the curr dual piece
+// 		if (j < last){
+// 			dj_start[i] = j;	
+// 		} else {
+// 			// this should only happen when all djs are zero
+// 			dj_start[i] = last;
+// 		}
+		
+// 		// Add reduced costs from the root lb/ub
+// 		for (j = dj_start[i]; j < last; j++)
+// 		{
+// 			idx = indices[j] - ws->m;
+// 			val = elem[j];
+// 			if (val > zerotol) // dj > 0 ?
+// 			{
+// 				if (lb[idx] > -SYM_INFINITY){
+// 					rhs_times_pi_plus_dj[i] += val * lb[idx];
+// 				} else {
+// 					is_dual_obj_infty[i] -= val;
+// 				}
+// 			}
+// 			else if (val < -zerotol) // dj < 0 ?
+// 			{
+// 				if (ub[idx] < SYM_INFINITY){
+// 					rhs_times_pi_plus_dj[i] += val * ub[idx];
+// 				} else {
+// 					is_dual_obj_infty[i] -= val;	
+// 				}
+// 			}
+// 		}
+// 	}
+// 	end = clock();
+// 	cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+// 	ws->dual_func->duals_cpu_time += cpu_time_used;
+// 	// printf("%.10f\n", ws->dual_func->duals_cpu_time);
+
+// 	// if (ws->dual_func->num_terms == 0){
+// 	// 	// The current b&b tree consists just of the root node
+// 	// 	local_best_bound = -SYM_INFINITY;
+// 	// 	// Now take the maximum
+// 	// 	for (i = 0; i < ws->dual_func->num_pieces; i++){
+// 	// 		if ((fabs(is_dual_obj_infty[i]) < zerotol) && 
+// 	// 		    (rhs_times_pi_plus_dj[i] > local_best_bound)){
+// 	// 			local_best_bound = rhs_times_pi_plus_dj[i];
+// 	// 		}
+// 	// 	}
+		
+// 	// 	global_best_bound = local_best_bound;
+// 	// 	goto TERM_EVAL_DUAL_FUNC;
+// 	// }
+
+// 	/* =========== feb223 ============================================
+// 	// Use the dual rays in the Dual Function description to check
+// 	// if they yield a Farkas proof of primal infeasibility 
+// 	// for some term of the disjunction.
+// 	// 
+// 	// Given the LP:
+// 	// min 		cx
+// 	// s.t.		Ax <= b,
+// 	//		l <= x <= u,			
+// 	// and let r be a dual ray, then the Farkas proof goes as
+// 	// 
+// 	// 				rAz - rb > 0, where
+// 	// 
+// 	// z[j]  =	l[j], if rA[j] > 0,
+// 	// 	     =	u[j], if rA[j] < 0 
+// 	// yield the minimum violation.
+// 	// 
+// 	// CLP returns by default (r, -rA) but r is for the scaled 
+// 	// LP it is internally solving and it may not prove infeasibility
+// 	// for the unscaled problem. This has already taken care
+// 	// of in get_dual_ray().
+// 	// ============================================================== */
+// 	start = clock();
+// 	feas_terms = (int *)malloc(ws->dual_func->num_terms * ISIZE);
+	
+// 	if (ws->dual_func->num_rays > 0){
+
+// 		// Allocate space for rhs * ray 
+// 		rhs_times_ray = (double *)calloc(ws->dual_func->num_rays, DSIZE);
+// 		rayA_start = (int *)malloc(ws->dual_func->num_rays * ISIZE);
+
+// 		const double* elem_r = rays->getElements();
+//     	const int* indices_r = rays->getIndices();
+
+// 		// Start by computing rhs * ray
+// 		for (i = 0; i < ws->dual_func->num_rays; i++){
+// 			first = rays->getVectorFirst(i);
+// 			last = rays->getVectorLast(i);
+// 			for (j = first; j < last && indices_r[j] < ws->m; ++j){
+// 				rhs_times_ray[i] -= elem_r[j] * rhs[indices_r[j]];
+// 			}
+// 			// the last value of j is where the rayA starts for the curr ray
+// 			if (j < last){
+// 				rayA_start[i] = j;	
+// 			} else {
+// 				// this should only happen when all rayA are zero
+// 				rayA_start[i] = last;
+// 			}
+// 		}
+
+// 		for (t = 0; t < ws->dual_func->num_terms; t++){
+
+// 			disj = ws->dual_func->disj + t;
+// 			// Install lb/ub
+// 			change_lbub_from_disj(lb, ub, ws->n, disj);
+
+// 			is_term_feas = TRUE;
+
+// 			for (int r = 0; (r < ws->dual_func->num_rays) && (is_term_feas); r++){
+				
+// 				farkasProof = rhs_times_ray[r];
+// 				last = rays->getVectorLast(r);
+
+// 				for (int i = rayA_start[r]; i < last; i++){
+// 					if (elem_r[i] > zerotol){
+// 						farkasProof += elem_r[i] * lb[indices_r[i] - ws->m];
+// 					} 
+// 					else if (elem_r[i] < -zerotol){
+// 						farkasProof += elem_r[i] * ub[indices_r[i] - ws->m];
+// 					}
+// 				}
+
+// 				if (farkasProof > 1e-5){
+// 					// This term of the disjunction is infeasible for this rhs
+// 					// and should not be considered
+// 					is_term_feas = FALSE;
+// 				}
+// 			}
+			
+// 			if (is_term_feas){
+// 				feas_terms[num_feas_terms++] = t;
+// 			}
+
+// 			// Reset lb/ub
+// 			reset_lbub_from_disj(lb, ub, mip->lb, mip->ub, ws->n, disj);
+// 		}
+// 	} else {
+// 		// No rays, all terms are feasible
+// 		num_feas_terms = ws->dual_func->num_terms;
+// 	}
+
+// 	end = clock();
+// 	cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+// 	ws->dual_func->rays_cpu_time += cpu_time_used;
+
+// #ifdef DEBUG_DUAL_FUNC
+// 	// This is a sanity check if the rays prove primal infeasibility
+// 	if (ws->dual_func->num_rays > 0){
+// 		clock_t start, end;
+// 		double cpu_time_used;
+// 		start = clock();
+// 		for (int t = 0; t < ws->dual_func->num_terms; t++){
+
+// 			disj = ws->dual_func->disj + t;
+// 			change_lbub_from_disj(lb, ub, ws->n, disj);
+		
+// 			si->loadProblem(ws->n, ws->m,
+// 								mip->matbeg, mip->matind,
+// 								mip->matval, lb,
+// 								ub, mip->obj,
+// 								mip->sense, rhs,
+// 								mip->rngval);
+			
+// 			si->initialSolve();
+
+// 			if (si->isProvenPrimalInfeasible()){
+// 				int found = 0;
+// 				for (int i = 0; i < num_feas_terms; i++){
+// 					if (feas_terms[i] == t){
+// 						found = 1;
+// 						break;
+// 					}
+// 				}
+// 				if (found){
+// 					// This case could happen when the leaf is OVER_UB_PRUNED
+// 					// and CLP stopped before proving dual unboundedness. 
+// 					// This is OK, as long as we have the appropriate dual solution
+// 				}
+// 			} else if (si->isProvenOptimal()){
+// 				int found = 0;
+// 				for (int i = 0; i < num_feas_terms; i++){
+// 					if (feas_terms[i] == t){
+// 						found = 1;
+// 						break;
+// 					}
+// 				}
+// 				if (!found){
+// 					printf("Warning: FarkasProof not working!\n");
+// 					// If this happens, it is problematic!!
+// 					// Farkas Proof is giving a false positive
+// 				}
+// 			}
+
+// 			reset_lbub_from_disj(lb, ub, mip->lb, mip->ub, ws->n, disj);
+// 		}
+// 		end = clock();
+// 		cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+// 		ws->dual_func->lp_cpu_time += cpu_time_used;
+// 	}
+// #endif
+	
+// 	start = clock();
+// // #pragma omp parallel for shared(global_best_bound)
+// 	// Now adjust the lb/ub * dj from the disjunction terms
+// 	for (int k = 0; k < num_feas_terms; k++){
+
+// 		t = (num_feas_terms == ws->dual_func->num_terms ? k : feas_terms[k]);
+
+// 		disj = ws->dual_func->disj + t;
+// 		int lblen = disj->lblen;
+// 		int *lbvaridx = disj->lbvaridx;
+// 		double *disj_lb = disj->lb;
+
+// 		int ublen = disj->ublen;
+// 		int *ubvaridx = disj->ubvaridx;
+// 		double *disj_ub = disj->ub;
+
+// 		local_best_bound = -SYM_INFINITY;
+
+// 		// change_lbub_from_disj(lb, ub, ws->n, disj);
+
+// #ifdef DEBUG_DUAL_FUNC
+// 		clock_t start, end;
+// 		double cpu_time_used;
+// 		start = clock();
+// 		si->loadProblem(ws->n, ws->m,
+// 							mip->matbeg, mip->matind,
+// 							mip->matval, lb,
+// 							ub, mip->obj,
+// 							mip->sense, rhs,
+// 							mip->rngval);
+		
+// 		si->initialSolve();
+// 		if (si->isProvenOptimal()){
+// 			sanity_objVal = si->getObjValue();
+// 		} else {
+// 			// Should never happen!
+// 			sanity_objVal = SYM_INFINITY;
+// 		}
+// 		end = clock();
+// 		cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+// 		ws->dual_func->lp_cpu_time += cpu_time_used;
+// #endif
+// 		for (int i = 0; i < ws->dual_func->num_pieces; i++){
+
+// 			dual_obj = rhs_times_pi_plus_dj[i];
+// 			is_infty = is_dual_obj_infty[i];
+// 			j = dj_start[i];
+// 			last = duals->getVectorLast(i);
+// 			l = 0, u = 0;
+// 			for (j = dj_start[i]; j < last; j++)
+// 			{
+// 				idx = indices[j] - ws->m;
+// 				val = elem[j];
+// 				if (val > zerotol) {
+// 					while (l < lblen && lbvaridx[l] < idx) l++;
+// 					if (l < lblen && lbvaridx[l] == idx){
+// 					// 	dual_obj += val * (disj_lb[l] - lb[idx]);
+// 						if (lb[idx] > -SYM_INFINITY) {
+// 							dual_obj += val * (disj_lb[l] - lb[idx]);
+// 						} else {
+// 							dual_obj += val * disj_lb[l];
+// 							is_infty += val;
+// 						}
+// 					}
+// 				} else if (val < zerotol) {
+// 					while (u < ublen && ubvaridx[u] < idx) u++;
+// 					if (u < ublen && ubvaridx[u] == idx){
+// 						// dual_obj += val * (disj_ub[u] - ub[idx]);
+// 						if (ub[idx] < SYM_INFINITY){
+// 							dual_obj += val * (disj_ub[u] - ub[idx]);
+// 						} else {
+// 							dual_obj += val * (disj_ub[u]);
+// 							is_infty += val;	
+// 						}
+// 					}
+// 				}
+// 			}
+			
+// 			if ((fabs(is_infty) < zerotol) &&
+// 				(dual_obj > local_best_bound)){
+// #ifdef CHECK_DUAL_FUNC
+// 				idx_loc_dual = i;
+// #endif
+// 				local_best_bound = dual_obj;
+// 			} 
+// 		}
+
+// #ifdef DEBUG_DUAL_FUNC
+// 		// Equality with sanity_objVal may not hold since
+// 		// CLP might have stopped the solution of LPs prematurely 
+// 		// due to the curr UB in the Tree but this is not a problem
+// 		// as long as the dual solution we have is enough to be "pruned by bound".
+// 		// Hence we check that local_best_bound 
+// 		// is a valid dual bound to sanity_objVal
+// 		// assert((local_best_bound - sanity_objVal) < 0.001);
+// #endif	
+
+// #ifdef CHECK_DUAL_FUNC
+// 		printf("Disj: %d, Best dual solution: %d\n", t, idx_loc_dual);
+// #endif
+// 		if (fabs(local_best_bound - global_best_bound) > zerotol && // Not equals
+// 		    local_best_bound < global_best_bound){ 
+// #ifdef CHECK_DUAL_FUNC
+// 			idx_opt_dual = idx_loc_dual;
+// 			idx_opt_term = t;
+// #endif
+// 			global_best_bound = local_best_bound;
+// 		}
+
+// 		// reset_lbub_from_disj(lb, ub, mip->lb, mip->ub, ws->n, disj);
+// 	}
+	
+// TERM_EVAL_DUAL_FUNC:
+
+// 	end = clock();
+// 	cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+// 	ws->dual_func->duals_cpu_time += cpu_time_used;
+
+// 	// Use granularity to round up the global_best_bound
+// 	if (granularity > zerotol){ // granularity >= 1
+// 		factor = granularity + zerotol;
+// 	} else {
+// 		factor = granularity;
+// 	}
+
+// 	// Assuming minimization here ???
+// 	global_best_bound = ceil((global_best_bound - zerotol) / factor) * factor;
+// #ifdef CHECK_DUAL_FUNC
+// 	printf("Best disj: %d, Best dual solution %d\n", idx_opt_term, idx_opt_dual);
+// #endif	
+// 	*dual_bound = global_best_bound;
+
+// 	FREE(rhs_times_pi_plus_dj);
+// 	FREE(is_dual_obj_infty);
+// 	FREE(dj_start);
+// 	FREE(lb);
+// 	FREE(ub);
+// 	FREE(rhs);
+// 	FREE(feas_terms);
+// 	if (ws->dual_func->num_rays > 0){	
+// 		FREE(rhs_times_ray);
+// 		FREE(rayA_start);
+// 	}
+
+// 	return (FUNCTION_TERMINATED_NORMALLY);
+// #else
+// 	printf("evaluate_dual_func():\n");
+// 	printf("Sensitivity analysis features are not enabled.\n");
+// 	printf("Please rebuild SYMPHONY with these features enabled\n");
+// 	return (FUNCTION_TERMINATED_ABNORMALLY);
+
+// #endif
+// }
 

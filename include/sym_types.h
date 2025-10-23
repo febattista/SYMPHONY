@@ -963,25 +963,70 @@ typedef struct DISJUNCTION_DESC{
    int             raylen;
 } disjunction_desc;
 
+typedef struct COLLECT_DUALS_STRUCT{
+   branch_desc          *bpath; 
+   disjunction_desc     *prev_disj;
+   disjunction_desc     *new_disj;
+   int                  prev_term; /* prev_disj */
+   int                  curr_term; /* new_disj */
+	int                  *duals_lst; 
+   int                   duallen; 
+   /* Dual rays in sparse form. Separate pi from dj */
+	int                  curr_ray; 
+   int                  *rays_pi_index_row; 
+   int                  *rays_pi_index_col; 
+   double               *rays_pi_val;
+   int                  nnz_pi_rays;
+   int                  *rays_dj_pos_index_row; 
+   int                  *rays_dj_pos_index_col; 
+   double               *rays_dj_pos_val;
+   int                  nnz_dj_pos_rays;
+   int                  *rays_dj_neg_index_row; 
+   int                  *rays_dj_neg_index_col; 
+   double               *rays_dj_neg_val;
+   int                  nnz_dj_neg_rays;
+   /* Dual solutions in sparse form. Separate pi from dj */
+	int                  curr_piece;
+   int                  *duals_pi_index_row; 
+   int                  *duals_pi_index_col;
+   double               *duals_pi_val;
+	int                  nnz_pi_duals;
+   int                  *duals_dj_pos_index_row; 
+   int                  *duals_dj_pos_index_col;
+   double               *duals_dj_pos_val;
+	int                  nnz_dj_pos_duals;
+   int                  *duals_dj_neg_index_row; 
+   int                  *duals_dj_neg_index_col;
+   double               *duals_dj_neg_val;
+	int                  nnz_dj_neg_duals;
+} collect_duals_struct;
+
 typedef struct DUAL_FUNC_DESC{
    // Parameters
    int                 dualsPolicy;
    int                 raysPolicy;
+   int                 evalPolicy;
    double              granularity;
    // dual pieces and reduced costs
    // Hash table to keep uniqueness of dual pieces
    dual_hash          *dhashtb;
-   CoinPackedMatrix   *duals;
+   // CoinPackedMatrix   *duals;
+   CoinPackedMatrix   *duals_pi;       /* num_pieces * m */
+   CoinPackedMatrix   *duals_dj_pos;   /* num_pieces * n */
+   CoinPackedMatrix   *duals_dj_neg;   /* num_pieces * n */
    int                 num_pieces;
    // dual rays that proves infeasibility
    ray_hash           *rhashtb;
-   CoinPackedMatrix   *rays;
+   // CoinPackedMatrix   *rays;
+   CoinPackedMatrix   *rays_pi;        /* num_rays * m */
+   CoinPackedMatrix   *rays_dj_pos;    /* num_rays * n */
+   CoinPackedMatrix   *rays_dj_neg;    /* num_rays * n */
    int                 num_rays;
    // disjunction description
    disjunction_desc   *disj;
    int                 num_terms; 
    OsiClpSolverInterface *si;
-   // Some statistics
+   /* Some statistics */
    double              lp_cpu_time;
    double              rays_cpu_time;
    double              duals_cpu_time;
