@@ -4816,7 +4816,7 @@ int build_dual_func(sym_environment *env)
 									duals_dj_neg_index_col, duals_dj_neg_val, cd->nnz_dj_neg_duals);
 
 		// Fix the dimensions
-		df_pi->setDimensions(-1, ws->m);
+		df_pi->setDimensions(cd->curr_piece, ws->m);
 		df_dj_pos->setDimensions(cd->curr_piece, ws->n);
 		df_dj_neg->setDimensions(cd->curr_piece, ws->n);
 
@@ -4871,7 +4871,7 @@ int build_dual_func(sym_environment *env)
 		
 
 		// Fix the dimensions
-		rays_pi->setDimensions(-1, ws->m);
+		rays_pi->setDimensions(cd->curr_ray, ws->m);
 		rays_dj_pos->setDimensions(cd->curr_ray, ws->n);
 		rays_dj_neg->setDimensions(cd->curr_ray, ws->n);
 
@@ -5252,6 +5252,7 @@ TERM_EVAL_DUAL_FUNC:
 	FREE(duals_pi_times_b);
 	FREE(rhs);
 
+	return (FUNCTION_TERMINATED_NORMALLY);
 	
 #else
 	printf("evaluate_dual_func():\n");
