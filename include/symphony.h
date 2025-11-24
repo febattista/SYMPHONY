@@ -390,9 +390,10 @@ SYMPHONYLIB_EXPORT int sym_free_env(sym_environment *env);
 
 SYMPHONYLIB_EXPORT void print_dual_function(sym_environment *env);
 SYMPHONYLIB_EXPORT int sym_build_dual_func(sym_environment *env);
-SYMPHONYLIB_EXPORT double sym_get_lp_time_dual_func(sym_environment *env);
 SYMPHONYLIB_EXPORT int sym_get_tree_size(sym_environment *env);
 SYMPHONYLIB_EXPORT int sym_evaluate_dual_function(sym_environment *env, 
+                              double *new_rhs, int size_new_rhs, double *dual_bound);
+SYMPHONYLIB_EXPORT int sym_get_dual_bound_from_tree(sym_environment *env,
                               double *new_rhs, int size_new_rhs, double *dual_bound);
                               
 #ifdef __cplusplus

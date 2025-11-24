@@ -4497,7 +4497,6 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 		
 		// Rays
 		raylen = is_new = (idx_this_ray >= 0);
-		
 		if (cd->prev_disj && cd->prev_disj->raylen) {
 			if (is_new){
 				for (i = 0; i < cd->prev_disj->raylen; i++) {

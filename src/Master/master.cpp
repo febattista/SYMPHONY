@@ -6852,12 +6852,54 @@ SYMPHONYLIB_EXPORT int sym_evaluate_dual_function(sym_environment *env,
                                           size_new_rhs, dual_bound);
 }
 
-SYMPHONYLIB_EXPORT double sym_get_lp_time_dual_func(sym_environment *env) {
-   if (env->warm_start && env->warm_start->dual_func){
-      return env->warm_start->dual_func->lp_cpu_time;
-   } else {
-      return 0.0;
-   }
+SYMPHONYLIB_EXPORT int sym_get_dual_bound_from_tree(sym_environment *env,
+                              double *new_rhs, int size_new_rhs, double *dual_bound) {
+   // int nodelim = -1, termcode = FUNCTION_TERMINATED_NORMALLY;
+   // double granularity = env->par.tm_par.granularity;
+   // double factor = 0, zerotol = 1e-6;
+   // *dual_bound = -SYM_INFINITY;
+   // if (env->warm_start){
+   //    for (int i = 0; i < size_new_rhs; i++){
+   //       switch (env->mip->sense[i]){
+   //          case 'E' :
+   //             sym_set_row_upper(env, i, new_rhs[i]);
+   //             sym_set_row_lower(env, i, new_rhs[i]);
+   //             break;
+   //          case 'G':
+   //             sym_set_row_lower(env, i, new_rhs[i]);
+   //             break;
+   //          case 'L':
+   //             sym_set_row_upper(env, i, new_rhs[i]);
+   //             break;
+   //          default:
+   //             printf("Error\n");
+   //       }
+   //    }
+   //    sym_get_int_param(env, "node_limit", &nodelim);
+   //    sym_set_int_param(env, "node_limit", 1); 
+   //    termcode = sym_warm_solve(env);
+
+   //    if (sym_is_proven_primal_infeasible(env)){
+   //       *dual_bound = 1e20;
+   //    } else {
+   //       *dual_bound = env->warm_start->lb;
+
+   //       // Use granularity to round up the dual_bound
+   //       if (granularity > zerotol){ // granularity >= 1
+   //          factor = granularity + zerotol;
+   //       } else {
+   //          factor = granularity;
+   //       }
+
+   //       *dual_bound = ceil((*dual_bound - zerotol) / factor) * factor;
+   //    }
+
+   //    sym_set_int_param(env, "node_limit", nodelim); 
+   // }
+   // return termcode;
+   printf("sym_get_dual_bound_from_tree():\n");
+   printf("Function not implemented yet.\n"); 
+   return(FUNCTION_TERMINATED_ABNORMALLY);
 }
 
 SYMPHONYLIB_EXPORT int sym_get_tree_size(sym_environment *env) {
