@@ -508,6 +508,11 @@ public:
 			  const double collb, const double colub,   
 			  const double obj);
 
+      // feb223: add a name also
+      virtual void addCol(const CoinPackedVectorBase& vec,
+			  const double collb, const double colub,   
+			  const double obj, char* name);
+
       /** Remove a set of columns (primal variables) from the problem.  */
    virtual void deleteCols(const int num, const int * colIndices);
     

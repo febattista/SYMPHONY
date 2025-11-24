@@ -1810,6 +1810,28 @@ void OsiSymSolverInterface::addCol(const CoinPackedVectorBase& vec,
 
 /*===========================================================================*/
 /*===========================================================================*/
+// feb223
+void OsiSymSolverInterface::addCol(const CoinPackedVectorBase& vec,
+				   const double collb, const double colub,   
+				   const double obj, char* name)
+{
+
+   int numElements, *indices = 0;
+   double *elements = 0;
+
+   freeCachedData(KEEPCACHED_ROW);
+
+   if((numElements = vec.getNumElements())){
+      indices = const_cast<int*>(vec.getIndices());
+      elements = const_cast<double*>(vec.getElements());
+   }
+
+   sym_add_col(env_, numElements, indices, elements, collb, colub, obj, false,
+	       name);
+}
+
+/*===========================================================================*/
+/*===========================================================================*/
 
 void OsiSymSolverInterface::addRow(const CoinPackedVectorBase& vec,
 				   const double rowlb, const double rowub)
