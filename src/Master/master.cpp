@@ -287,8 +287,8 @@ SYMPHONYLIB_EXPORT int sym_set_defaults(sym_environment *env)
    tm_par->warm_start_node_level_ratio = 0.0; 
    tm_par->warm_start_node_level = MAXINT;
 
-   tm_par->save_duals_policy = DUALS_SAVE_ALL;
-   tm_par->save_rays_policy = RAYS_SAVE_FARKAS;
+   tm_par->save_duals_policy = DUALS_LEAF_ONLY;
+   tm_par->save_rays_policy = RAYS_SAVE_DUALS;
    tm_par->eval_dual_function_policy = USE_DUALS_AND_RAYS_FROM_ONE_DISJ_TERM;
 
    tm_par->logging = NO_LOGGING;
@@ -7507,27 +7507,27 @@ SYMPHONYLIB_EXPORT int sym_set_param(sym_environment *env, char *line)
    else if (strcmp(key, "save_duals_policy") == 0 ||
 	    strcmp(key, "TM_save_duals_policy") == 0){
       READ_INT_PAR(tm_par->save_duals_policy);
-      if ((tm_par->save_duals_policy != DUALS_SAVE_ALL) &&
-            (tm_par->save_duals_policy != DUALS_LEAF_ONLY))
+      if ((tm_par->save_duals_policy != DUALS_LEAF_ONLY) &&
+            (tm_par->save_duals_policy != DUALS_SAVE_ALL))
       {
          printf("Warning: save_duals_policy does not have a valid value.\n");
-         printf("         Re-setting it to DUALS_SAVE_ALL.\n\n");
+         printf("         Re-setting it to DUALS_LEAF_ONLY.\n\n");
 
-         tm_par->save_duals_policy = DUALS_SAVE_ALL;
+         tm_par->save_duals_policy = DUALS_LEAF_ONLY;
       }
       return(0);
    }
    else if (strcmp(key, "save_rays_policy") == 0 ||
 	    strcmp(key, "TM_save_rays_policy") == 0){
       READ_INT_PAR(tm_par->save_rays_policy);
-      if ((tm_par->save_rays_policy != RAYS_SAVE_FARKAS) &&
-            (tm_par->save_rays_policy != RAYS_SAVE_DUALS) &&
+      if ((tm_par->save_rays_policy != RAYS_SAVE_DUALS) &&
+            (tm_par->save_rays_policy != RAYS_SAVE_FARKAS) &&
             (tm_par->save_rays_policy != RAYS_SAVE_ALL))
       {
          printf("Warning: save_rays_policy does not have a valid value.\n");
-         printf("         Re-setting it to RAYS_SAVE_FARKAS.\n\n");
+         printf("         Re-setting it to RAYS_SAVE_DUALS.\n\n");
 
-         tm_par->save_rays_policy = RAYS_SAVE_FARKAS;
+         tm_par->save_rays_policy = RAYS_SAVE_DUALS;
       }
       return(0);
    }
