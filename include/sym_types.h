@@ -1003,9 +1003,9 @@ typedef struct COLLECT_DUALS_STRUCT{
 
 typedef struct DUAL_FUNC_DESC{
    // Parameters
-   int                 dualsPolicy;
-   int                 raysPolicy;
-   int                 evalPolicy;
+   int                 duals_policy;
+   int                 rays_policy;
+   int                 eval_policy;
    double              granularity;
    // dual pieces and reduced costs
    // Hash table to keep uniqueness of dual pieces
