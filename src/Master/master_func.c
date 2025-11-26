@@ -3939,15 +3939,15 @@ void print_dual_function(warm_start_desc *ws)
 	printf("====================================\n");
 	printf("  DUAL FUNCTION INFO\n");
 	printf("====================================\n");
-	if (ws->dual_func->dualsPolicy == DUALS_LEAF_ONLY)
+	if (ws->dual_func->duals_policy == DUALS_LEAF_ONLY)
 		printf("Policy: DUALS_LEAF_ONLY\n");
-	else if (ws->dual_func->dualsPolicy == DUALS_SAVE_ALL)
+	else if (ws->dual_func->duals_policy == DUALS_SAVE_ALL)
 		printf("Policy: DUALS_SAVE_ALL\n");
-	if (ws->dual_func->raysPolicy == RAYS_SAVE_FARKAS)
+	if (ws->dual_func->rays_policy == RAYS_SAVE_FARKAS)
 		printf("Policy: RAYS_SAVE_FARKAS\n");
-	else if (ws->dual_func->raysPolicy == RAYS_SAVE_DUALS)
+	else if (ws->dual_func->rays_policy == RAYS_SAVE_DUALS)
 		printf("Policy: RAYS_SAVE_DUALS\n");
-	else if (ws->dual_func->raysPolicy == RAYS_SAVE_ALL)
+	else if (ws->dual_func->rays_policy == RAYS_SAVE_ALL)
 		printf("Policy: RAYS_SAVE_ALL\n");
 	printf("Granularity: %.10f\n", ws->dual_func->granularity);
 	printf("Num rays: %d\n", ws->dual_func->num_rays);
@@ -4102,6 +4102,7 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 	int lbchange = 0, ubchange = 0; 
 	int level = node->bc_level, child_num = node->bobj.child_num;
 	int idx_this_dual = -1;
+	int pos_this_dual = -1;
 	int  idx_this_ray = -1;
 	int leaflen = 0, raylen = 0;
 	int is_new, should_free_this_dual = FALSE;
@@ -4164,21 +4165,21 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 		node->feasibility_status == NODE_BRANCHED_ON ||
 		node->feasibility_status == ITERATION_LIMIT ||
 		node->feasibility_status == TIME_LIMIT ||
-     (((ws->dual_func->raysPolicy == RAYS_SAVE_ALL) ||
-	   (ws->dual_func->raysPolicy == RAYS_SAVE_DUALS)) &&
+     (((ws->dual_func->rays_policy == RAYS_SAVE_ALL) ||
+	   (ws->dual_func->rays_policy == RAYS_SAVE_DUALS)) &&
 		node->feasibility_status == INFEASIBLE_PRUNED)){
 
 		if (node->duals && node->dj && 
-		  (ws->dual_func->raysPolicy != RAYS_SAVE_FARKAS || !node->rays) &&
-		 ((ws->dual_func->dualsPolicy == DUALS_SAVE_ALL) ||
-		  (ws->dual_func->dualsPolicy == DUALS_LEAF_ONLY && !child_num)))
+		  (ws->dual_func->rays_policy != RAYS_SAVE_FARKAS || !node->rays) &&
+		 ((ws->dual_func->duals_policy == DUALS_SAVE_ALL) ||
+		  (ws->dual_func->duals_policy == DUALS_LEAF_ONLY && !child_num)))
 		{	
 
 			this_dual = node->duals;
 			this_djs = node->dj;
 			
 			if ((node->rays) &&
-				(ws->dual_func->raysPolicy != RAYS_SAVE_FARKAS) && 
+				(ws->dual_func->rays_policy != RAYS_SAVE_FARKAS) && 
 				(node->feasibility_status == INFEASIBLE_PRUNED || 
 				 node->feasibility_status == OVER_UB_PRUNED)){
 				// Take the Farkas proof and get a dual ray
@@ -4367,8 +4368,8 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 			}
 
 		// Check if we must collect the ray (if any)
-		if (((ws->dual_func->raysPolicy == RAYS_SAVE_ALL) ||
-			(ws->dual_func->raysPolicy == RAYS_SAVE_FARKAS)) &&
+		if (((ws->dual_func->rays_policy == RAYS_SAVE_ALL) ||
+			(ws->dual_func->rays_policy == RAYS_SAVE_FARKAS)) &&
 			((node->feasibility_status == INFEASIBLE_PRUNED) ||
 			((node->feasibility_status == OVER_UB_PRUNED) && (node->rays)))){
 #ifdef CHECK_DUAL_FUNC
@@ -4472,11 +4473,13 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 #endif		
 		// Leaves
 		leaflen = is_new = (idx_this_dual >= 0);
+		pos_this_dual = -1;
 		if (cd->prev_disj && cd->prev_disj->leaflen) {
 			if (is_new){
 				for (i = 0; i < cd->prev_disj->leaflen; i++) {
 					if (cd->prev_disj->leaf_idx[i] == idx_this_dual) {
 						is_new = 0;
+						pos_this_dual = i;
 						break;
 					}
 				}
@@ -4490,7 +4493,13 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 			if (cd->prev_disj && cd->prev_disj->leaflen) {
 				memcpy(disj.leaf_idx, cd->prev_disj->leaf_idx, ISIZE * cd->prev_disj->leaflen);
 			}
-			if (idx_this_dual >= 0 && is_new) {
+			if (idx_this_dual >= 0) {
+				if (!is_new && (pos_this_dual >= 0)) {
+					// The case of an existing dual solution that is already existing in
+					// the leaf_idx array. Make a swap such that the last entry of the
+					// leaf_idx array corresponds to this dual solution.
+					disj.leaf_idx[pos_this_dual] = disj.leaf_idx[leaflen - 1];
+				}
 				disj.leaf_idx[leaflen - 1] = idx_this_dual;
 			}
 		}
@@ -4679,12 +4688,15 @@ int build_dual_func(sym_environment *env)
  	if (!ws->dual_func)
 	{
 		ws->dual_func = (dual_func_desc *)calloc(1, sizeof(dual_func_desc));
-		// ws->dual_func->dualsPolicy = DUALS_SAVE_ALL;
-		ws->dual_func->dualsPolicy = DUALS_LEAF_ONLY;
-		// ws->dual_func->raysPolicy = RAYS_SAVE_ALL;
-		ws->dual_func->raysPolicy = RAYS_SAVE_FARKAS;
-		// ws->dual_func->raysPolicy = RAYS_SAVE_DUALS;
-		ws->dual_func->evalPolicy = USE_DUALS_AND_RAYS_FROM_ONE_DISJ_TERM;
+		// ws->dual_func->duals_policy = DUALS_SAVE_ALL;
+		// ws->dual_func->duals_policy = DUALS_LEAF_ONLY;
+		ws->dual_func->duals_policy = env->par.tm_par.save_duals_policy;
+		// ws->dual_func->rays_policy = RAYS_SAVE_ALL;
+		// ws->dual_func->rays_policy = RAYS_SAVE_FARKAS;
+		ws->dual_func->rays_policy = env->par.tm_par.save_rays_policy;
+		// ws->dual_func->rays_policy = RAYS_SAVE_DUALS;
+		// ws->dual_func->eval_policy = USE_DUALS_AND_RAYS_FROM_ONE_DISJ_TERM;
+		ws->dual_func->eval_policy = env->par.tm_par.eval_dual_function_policy;
 		ws->dual_func->granularity = env->par.tm_par.granularity;
 	}
 	
@@ -4694,11 +4706,11 @@ int build_dual_func(sym_environment *env)
 	// Allocate the space for the expected number of duals
 	// based on the policy
 	int num_pieces;
-	if ((ws->dual_func->dualsPolicy == DUALS_SAVE_ALL))
+	if ((ws->dual_func->duals_policy == DUALS_SAVE_ALL))
 	{
 		num_pieces = ws->stat.tree_size;
 	}
-	else if (ws->dual_func->dualsPolicy == DUALS_LEAF_ONLY)
+	else if (ws->dual_func->duals_policy == DUALS_LEAF_ONLY)
 	{
 		num_pieces = num_leaf;
 	}
@@ -4724,8 +4736,8 @@ int build_dual_func(sym_environment *env)
 	double *rays_dj_neg_val = NULL;
 
 	// Allocate memory for rays based on the policy
-	if ((ws->dual_func->raysPolicy == RAYS_SAVE_ALL) ||
-		(ws->dual_func->raysPolicy == RAYS_SAVE_FARKAS))
+	if ((ws->dual_func->rays_policy == RAYS_SAVE_ALL) ||
+		(ws->dual_func->rays_policy == RAYS_SAVE_FARKAS))
 	{
 		rays_pi_index_row = (int *)malloc(ISIZE * num_rays * (ws->m));
 		rays_pi_index_col = (int *)malloc(ISIZE * num_rays * (ws->m));
@@ -5079,7 +5091,7 @@ int evaluate_dual_function(warm_start_desc *ws, MIPdesc *mip,
 
 			is_term_feas = TRUE;
 
-			switch (ws->dual_func->evalPolicy)
+			switch (ws->dual_func->eval_policy)
 			{
 			case USE_DUALS_AND_RAYS_FROM_ALL_DISJ_TERM:
 				this_term_num_items = ws->dual_func->num_rays;
@@ -5092,7 +5104,7 @@ int evaluate_dual_function(warm_start_desc *ws, MIPdesc *mip,
 
 			for (r = 0; (r < this_term_num_items) && (is_term_feas); ++r){
 				
-				if (ws->dual_func->evalPolicy == USE_DUALS_AND_RAYS_FROM_ONE_DISJ_TERM)
+				if (ws->dual_func->eval_policy == USE_DUALS_AND_RAYS_FROM_ONE_DISJ_TERM)
 					this_item_idx = disj->ray_idx[r];
 				else 
 					this_item_idx = r;
@@ -5170,7 +5182,7 @@ int evaluate_dual_function(warm_start_desc *ws, MIPdesc *mip,
 
 		local_best_bound = -SYM_INFINITY;
 
-		switch (ws->dual_func->evalPolicy)
+		switch (ws->dual_func->eval_policy)
 		{
 		case USE_DUALS_AND_RAYS_FROM_ALL_DISJ_TERM:
 			this_term_num_items = ws->dual_func->num_pieces;
@@ -5182,7 +5194,7 @@ int evaluate_dual_function(warm_start_desc *ws, MIPdesc *mip,
 		}
 
 		for (r = 0; r < this_term_num_items; ++r){
-			if (ws->dual_func->evalPolicy == USE_DUALS_AND_RAYS_FROM_ONE_DISJ_TERM)
+			if (ws->dual_func->eval_policy == USE_DUALS_AND_RAYS_FROM_ONE_DISJ_TERM)
 				this_item_idx = disj->leaf_idx[r];
 			else 
 				this_item_idx = r;
