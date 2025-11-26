@@ -4097,11 +4097,12 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 	double *matval = mip->matval;
 	int nz = mip->nz, start, end;
 
-	int i, j, k, l;
+	int i, j, k, l, temp;
 	int varidx, nnz = 0;
 	int lbchange = 0, ubchange = 0; 
 	int level = node->bc_level, child_num = node->bobj.child_num;
 	int idx_this_dual = -1;
+	int idx_this_dual_leaf = -1;
 	int  idx_this_ray = -1;
 	int leaflen = 0, raylen = 0;
 	int is_new, should_free_this_dual = FALSE;
@@ -4472,11 +4473,13 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 #endif		
 		// Leaves
 		leaflen = is_new = (idx_this_dual >= 0);
+		idx_this_dual_leaf = -1;
 		if (cd->prev_disj && cd->prev_disj->leaflen) {
 			if (is_new){
 				for (i = 0; i < cd->prev_disj->leaflen; i++) {
 					if (cd->prev_disj->leaf_idx[i] == idx_this_dual) {
 						is_new = 0;
+						idx_this_dual_leaf = i;
 						break;
 					}
 				}
@@ -4492,6 +4495,14 @@ void collect_duals_from_tree(sym_environment *env, bc_node *node, MIPdesc *mip,
 			}
 			if (idx_this_dual >= 0 && is_new) {
 				disj.leaf_idx[leaflen - 1] = idx_this_dual;
+			}
+			else if (!is_new && (idx_this_dual_leaf >= 0)) {
+				// The case of an existing dual solution that is already existing in
+				// the leaf_idx array. Make a swap such that the last entry of the
+				// leaf_idx array corresponds to this dual solution.
+				temp = disj.leaf_idx[leaflen - 1];
+				disj.leaf_idx[leaflen - 1] = disj.leaf_idx[idx_this_dual_leaf];
+				disj.leaf_idx[idx_this_dual_leaf] = temp;
 			}
 		}
 		
