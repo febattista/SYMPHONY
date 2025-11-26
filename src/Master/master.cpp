@@ -287,6 +287,10 @@ SYMPHONYLIB_EXPORT int sym_set_defaults(sym_environment *env)
    tm_par->warm_start_node_level_ratio = 0.0; 
    tm_par->warm_start_node_level = MAXINT;
 
+   tm_par->save_duals_policy = DUALS_SAVE_ALL;
+   tm_par->save_rays_policy = RAYS_SAVE_FARKAS;
+   tm_par->eval_dual_function_policy = USE_DUALS_AND_RAYS_FROM_ONE_DISJ_TERM;
+
    tm_par->logging = NO_LOGGING;
    tm_par->logging_interval = 1800;
    tm_par->status_interval = 5;
@@ -5527,6 +5531,21 @@ SYMPHONYLIB_EXPORT int sym_get_int_param(sym_environment *env, const char *key,
       *value = tm_par->warm_start;
       return(0);
    }
+   else if (strcmp(key, "save_duals_policy") == 0 ||
+	    strcmp(key, "TM_save_duals_policy") == 0){
+      *value = tm_par->save_duals_policy;
+      return(0);
+   }
+   else if (strcmp(key, "save_rays_policy") == 0 ||
+	    strcmp(key, "TM_save_rays_policy") == 0){
+      *value = tm_par->save_rays_policy;
+      return(0);
+   }
+   else if (strcmp(key, "eval_dual_function_policy") == 0 ||
+	    strcmp(key, "TM_eval_dual_function_policy") == 0){
+      *value = tm_par->eval_dual_function_policy;
+      return(0);
+   }
    else if (strcmp(key, "vbc_emulation") == 0 ||
 	    strcmp(key, "TM_vbc_emulation") == 0){
       *value = tm_par->vbc_emulation;
@@ -7483,6 +7502,46 @@ SYMPHONYLIB_EXPORT int sym_set_param(sym_environment *env, char *line)
    else if (strcmp(key, "warm_start_node_ratio") == 0 ||
 	    strcmp(key, "TM_warm_start_node_ratio") == 0){
       READ_DBL_PAR(tm_par->warm_start_node_ratio);
+      return(0);
+   }
+   else if (strcmp(key, "save_duals_policy") == 0 ||
+	    strcmp(key, "TM_save_duals_policy") == 0){
+      READ_INT_PAR(tm_par->save_duals_policy);
+      if ((tm_par->save_duals_policy != DUALS_SAVE_ALL) &&
+            (tm_par->save_duals_policy != DUALS_LEAF_ONLY))
+      {
+         printf("Warning: save_duals_policy does not have a valid value.\n");
+         printf("         Re-setting it to DUALS_SAVE_ALL.\n\n");
+
+         tm_par->save_duals_policy = DUALS_SAVE_ALL;
+      }
+      return(0);
+   }
+   else if (strcmp(key, "save_rays_policy") == 0 ||
+	    strcmp(key, "TM_save_rays_policy") == 0){
+      READ_INT_PAR(tm_par->save_rays_policy);
+      if ((tm_par->save_rays_policy != RAYS_SAVE_FARKAS) &&
+            (tm_par->save_rays_policy != RAYS_SAVE_DUALS) &&
+            (tm_par->save_rays_policy != RAYS_SAVE_ALL))
+      {
+         printf("Warning: save_rays_policy does not have a valid value.\n");
+         printf("         Re-setting it to RAYS_SAVE_FARKAS.\n\n");
+
+         tm_par->save_rays_policy = RAYS_SAVE_FARKAS;
+      }
+      return(0);
+   }
+   else if (strcmp(key, "eval_dual_function_policy") == 0 ||
+	    strcmp(key, "TM_eval_dual_function_policy") == 0){
+      READ_INT_PAR(tm_par->eval_dual_function_policy);
+      if ((tm_par->eval_dual_function_policy != USE_DUALS_AND_RAYS_FROM_ONE_DISJ_TERM) &&
+            (tm_par->eval_dual_function_policy != USE_DUALS_AND_RAYS_FROM_ALL_DISJ_TERM))
+      {
+         printf("Warning: eval_dual_function_policy does not have a valid value.\n");
+         printf("         Re-setting it to USE_DUALS_AND_RAYS_FROM_ONE_DISJ_TERM.\n\n");
+
+         tm_par->eval_dual_function_policy = USE_DUALS_AND_RAYS_FROM_ONE_DISJ_TERM;
+      }
       return(0);
    }
    else if (strcmp(key, "vbc_emulation") == 0 ||

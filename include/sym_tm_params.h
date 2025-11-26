@@ -73,6 +73,10 @@ typedef struct TM_PARAMS{
    char        cut_log_file_name[MAX_FILE_NAME_LENGTH +1];
    int         price_in_root;
    int         trim_search_tree;
+   // Policies for saving dual information and evaluating dual function
+   int         save_duals_policy;
+   int         save_rays_policy;
+   int         eval_dual_function_policy;
 
    int         colgen_strat[2]; /* the column generattion strategy for the LP
 				   in the two phases */

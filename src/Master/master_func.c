@@ -4680,11 +4680,14 @@ int build_dual_func(sym_environment *env)
 	{
 		ws->dual_func = (dual_func_desc *)calloc(1, sizeof(dual_func_desc));
 		// ws->dual_func->duals_policy = DUALS_SAVE_ALL;
-		ws->dual_func->duals_policy = DUALS_LEAF_ONLY;
+		// ws->dual_func->duals_policy = DUALS_LEAF_ONLY;
+		ws->dual_func->duals_policy = env->par.tm_par.save_duals_policy;
 		// ws->dual_func->rays_policy = RAYS_SAVE_ALL;
-		ws->dual_func->rays_policy = RAYS_SAVE_FARKAS;
+		// ws->dual_func->rays_policy = RAYS_SAVE_FARKAS;
+		ws->dual_func->rays_policy = env->par.tm_par.save_rays_policy;
 		// ws->dual_func->rays_policy = RAYS_SAVE_DUALS;
-		ws->dual_func->eval_policy = USE_DUALS_AND_RAYS_FROM_ONE_DISJ_TERM;
+		// ws->dual_func->eval_policy = USE_DUALS_AND_RAYS_FROM_ONE_DISJ_TERM;
+		ws->dual_func->eval_policy = env->par.tm_par.eval_dual_function_policy;
 		ws->dual_func->granularity = env->par.tm_par.granularity;
 	}
 	
