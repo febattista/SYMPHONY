@@ -7508,7 +7508,7 @@ SYMPHONYLIB_EXPORT int sym_set_param(sym_environment *env, char *line)
 	    strcmp(key, "TM_save_duals_policy") == 0){
       READ_INT_PAR(tm_par->save_duals_policy);
       if ((tm_par->save_duals_policy != DUALS_LEAF_ONLY) &&
-            (tm_par->save_duals_policy != DUALS_SAVE_ALL))
+          (tm_par->save_duals_policy != DUALS_SAVE_ALL))
       {
          printf("Warning: save_duals_policy does not have a valid value.\n");
          printf("         Re-setting it to DUALS_LEAF_ONLY.\n\n");
@@ -7521,8 +7521,8 @@ SYMPHONYLIB_EXPORT int sym_set_param(sym_environment *env, char *line)
 	    strcmp(key, "TM_save_rays_policy") == 0){
       READ_INT_PAR(tm_par->save_rays_policy);
       if ((tm_par->save_rays_policy != RAYS_SAVE_DUALS) &&
-            (tm_par->save_rays_policy != RAYS_SAVE_FARKAS) &&
-            (tm_par->save_rays_policy != RAYS_SAVE_ALL))
+          (tm_par->save_rays_policy != RAYS_SAVE_FARKAS) &&
+          (tm_par->save_rays_policy != RAYS_SAVE_ALL))
       {
          printf("Warning: save_rays_policy does not have a valid value.\n");
          printf("         Re-setting it to RAYS_SAVE_DUALS.\n\n");
@@ -7535,7 +7535,7 @@ SYMPHONYLIB_EXPORT int sym_set_param(sym_environment *env, char *line)
 	    strcmp(key, "TM_eval_dual_function_policy") == 0){
       READ_INT_PAR(tm_par->eval_dual_function_policy);
       if ((tm_par->eval_dual_function_policy != USE_DUALS_AND_RAYS_FROM_ONE_DISJ_TERM) &&
-            (tm_par->eval_dual_function_policy != USE_DUALS_AND_RAYS_FROM_ALL_DISJ_TERM))
+          (tm_par->eval_dual_function_policy != USE_DUALS_AND_RAYS_FROM_ALL_DISJ_TERM))
       {
          printf("Warning: eval_dual_function_policy does not have a valid value.\n");
          printf("         Re-setting it to USE_DUALS_AND_RAYS_FROM_ONE_DISJ_TERM.\n\n");
