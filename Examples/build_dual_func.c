@@ -23,7 +23,8 @@ int main(int argc, char **argv)
       
    int termcode;
    int n = 4; // number of variables
-   int m = 2; // number of constraints 
+   int m = 2; // number of constraints
+   double bound;
 
    double *rhs = (double *) malloc(m * sizeof(double));
    double *coeff = (double *) malloc(n * sizeof(double));
@@ -38,6 +39,7 @@ int main(int argc, char **argv)
 
    // Set the parameters for the warm starting
    sym_set_int_param(env, "keep_warm_start", TRUE);
+   sym_set_int_param(env, "keep_dual_function_description", TRUE);
    sym_set_int_param(env, "should_use_rel_br", FALSE);
    sym_set_int_param(env, "use_hot_starts", FALSE);
    sym_set_int_param(env, "should_warmstart_node", TRUE);
@@ -52,44 +54,51 @@ int main(int argc, char **argv)
    sym_set_int_param(env, "do_reduced_cost_fixing", FALSE);
    sym_set_int_param(env, "generate_cgl_cuts", FALSE);
    sym_set_int_param(env, "max_active_nodes", 1);
-
+   sym_set_int_param(env, "verbosity", 10);
+   sym_set_int_param(env, "save_rays_policy", 1);
+   
    // First solve the original problem
    // This will create a warm start for the next solve
-   if ((termcode = sym_solve(env)) < 0){
-      printf("PROBLEM INFEASIBLE!\n");
-      return (1);
-   }
+   // if ((termcode = sym_solve(env)) < 0){
+   //   printf("PROBLEM INFEASIBLE!\n");
+   //   return (1);
+   //}
 
    // Set the new RHS
-   rhs = generate_rand_array(m, -1000, -1);
-   for (int i = 0; i < m; i++){
-      sym_set_row_upper(env, i, rhs[i]);
-   }
-
-   // Set the new Obj Coeff
-   coeff = generate_rand_array(n, 1, 1000);
-   for (int i = 0; i < n; i++){
-      sym_set_obj_coeff(env, i, coeff[i]);
-   }
-
-   // Warm solve
+   sym_set_row_upper(env, 0, -4);
    if ((termcode = sym_warm_solve(env)) < 0){
       printf("PROBLEM INFEASIBLE!\n");
       return(1);
    } 
-   // Get the objective value
-   sym_get_obj_val(env, warmObjVal);
 
-   // Cold solve to check if the values coincide
-   if ((termcode = sym_solve(env)) < 0){
+   sym_set_row_upper(env, 0, -50);
+   if ((termcode = sym_warm_solve(env)) < 0){
       printf("PROBLEM INFEASIBLE!\n");
       return(1);
    } 
 
-   sym_get_obj_val(env, coldObjVal);
+   sym_set_row_upper(env, 0, -11);
+   if ((termcode = sym_solve(env)) < 0){
+      printf("PROBLEM INFEASIBLE!\n");
+      return(1);
+   }
 
-   // These must be equal
-   assert((*warmObjVal) == (*coldObjVal));
+   sym_set_row_upper(env, 0, -5);
+   if ((termcode = sym_warm_solve(env)) < 0){
+      printf("PROBLEM INFEASIBLE!\n");
+      return(1);
+   }
+
+   sym_set_row_upper(env, 0, -30);
+   if ((termcode = sym_warm_solve(env)) < 0){
+      printf("PROBLEM INFEASIBLE!\n");
+      return(1);
+   }
+
+   sym_build_dual_func(env);
+   rhs[0] = -10;
+   sym_evaluate_dual_function(env, rhs, 1, &bound);
+   printf("Dual function at %f: %f \n", rhs[0], bound);
 
    sym_close_environment(env);
    return 0;
